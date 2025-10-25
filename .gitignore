@@ -50,6 +50,3 @@ docs/_build/
 # Lock files (uncomment if you want to ignore them)
 # manifest
 # gleam.lock
-
-src/reddit/client/
-src/reddit/engine/
