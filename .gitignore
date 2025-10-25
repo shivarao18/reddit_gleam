@@ -1,0 +1,55 @@
+# Gleam build artifacts
+/build/
+/_build/
+
+# Gleam dependencies
+/deps/
+
+# Erlang/OTP artifacts
+*.beam
+*.boot
+*.script
+.erlang.mk/
+erl_crash.dump
+eunit/
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS files
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Package manager files (if using hex locally)
+.hex/
+*.ez
+
+# Test artifacts
+_test/
+.test/
+
+# Coverage reports
+cover/
+*.coverdata
+
+# Documentation build
+doc/
+docs/_build/
+
+# Lock files (uncomment if you want to ignore them)
+# manifest
+# gleam.lock
+
+src/reddit/client/
+src/reddit/engine/
