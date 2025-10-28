@@ -1,5 +1,5 @@
 import gleam/dict.{type Dict}
-import gleam/erlang/process
+import gleam/erlang/process.{type Subject, send}
 import gleam/int
 import gleam/list
 import gleam/otp/actor
@@ -20,49 +20,53 @@ pub type State {
   )
 }
 
-pub fn start() -> Result(actor.StartResult(SubredditManagerMessage), actor.StartError) {
+pub fn start() -> actor.StartResult(Subject(SubredditManagerMessage)) {
   let initial_state = State(subreddits: dict.new(), name_to_id: dict.new(), next_id: 1)
-  actor.start(initial_state, handle_message)
+  
+  let builder =
+    actor.new(initial_state)
+    |> actor.on_message(handle_message)
+  actor.start(builder)
 }
 
 fn handle_message(
-  message: SubredditManagerMessage,
   state: State,
-) -> actor.Next(SubredditManagerMessage, State) {
+  message: SubredditManagerMessage,
+) -> actor.Next(State, SubredditManagerMessage) {
   case message {
     protocol.CreateSubreddit(name, description, creator_id, reply) -> {
       let #(result, new_state) = create_subreddit(state, name, description, creator_id)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.GetSubreddit(subreddit_id, reply) -> {
       let result = get_subreddit(state, subreddit_id)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(state)
     }
 
     protocol.GetSubredditByName(name, reply) -> {
       let result = get_subreddit_by_name(state, name)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(state)
     }
 
     protocol.JoinSubreddit(subreddit_id, user_id, reply) -> {
       let #(result, new_state) = join_subreddit(state, subreddit_id, user_id)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.LeaveSubreddit(subreddit_id, user_id, reply) -> {
       let #(result, new_state) = leave_subreddit(state, subreddit_id, user_id)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.ListAllSubreddits(reply) -> {
       let all_subreddits = list_all_subreddits(state)
-      actor.send(reply, all_subreddits)
+      send(reply, all_subreddits)
       actor.continue(state)
     }
   }
@@ -192,8 +196,11 @@ fn list_all_subreddits(state: State) -> List(Subreddit) {
 }
 
 // Helper functions
+@external(erlang, "erlang", "system_time")
+fn erlang_system_time() -> Int
+
 fn get_timestamp() -> Int {
-  process.system_time()
+  erlang_system_time()
   |> int.divide(1_000_000)
   |> result.unwrap(0)
 }

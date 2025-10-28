@@ -1,12 +1,12 @@
-import gleam/erlang/process
+import gleam/erlang/process.{type Subject, send}
 import gleam/int
 import gleam/list
-import gleam/otp/actor.{type Subject}
-import gleam/option
+import gleam/otp/actor
+import gleam/option.{type Option}
 import gleam/result
-import gleam/string
 import reddit/client/activity_coordinator.{
-  type ActivityCoordinatorMessage, type ActivityType,
+  type ActivityCoordinatorMessage, CastVote, CreateComment, CreatePost,
+  JoinSubreddit, SendDirectMessage,
 }
 import reddit/client/metrics_collector.{type MetricsMessage}
 import reddit/protocol.{
@@ -52,7 +52,7 @@ pub fn start(
   dm_manager: Subject(DirectMessageManagerMessage),
   activity_coordinator: Subject(ActivityCoordinatorMessage),
   metrics: Subject(MetricsMessage),
-) -> Result(actor.StartResult(UserSimulatorMessage), actor.StartError) {
+) -> actor.StartResult(Subject(UserSimulatorMessage)) {
   let initial_state =
     UserSimulatorState(
       user_id: option.None,
@@ -69,13 +69,17 @@ pub fn start(
       activity_coordinator: activity_coordinator,
       metrics: metrics,
     )
-  actor.start(initial_state, handle_message)
+  
+  let builder =
+    actor.new(initial_state)
+    |> actor.on_message(handle_message)
+  actor.start(builder)
 }
 
 fn handle_message(
-  message: UserSimulatorMessage,
   state: UserSimulatorState,
-) -> actor.Next(UserSimulatorMessage, UserSimulatorState) {
+  message: UserSimulatorMessage,
+) -> actor.Next(UserSimulatorState, UserSimulatorMessage) {
   case message {
     Initialize -> {
       let new_state = initialize_user(state)
@@ -98,7 +102,7 @@ fn handle_message(
     }
 
     Shutdown -> {
-      actor.Stop(process.Normal)
+      actor.stop()
     }
   }
 }
@@ -108,13 +112,13 @@ fn initialize_user(state: UserSimulatorState) -> UserSimulatorState {
   let result =
     actor.call(
       state.user_registry,
-      protocol.RegisterUser(state.username, _),
-      5000,
+      waiting: 5000,
+      sending: protocol.RegisterUser(state.username, _),
     )
 
   case result {
     types.RegistrationSuccess(user) -> {
-      actor.send(state.metrics, metrics_collector.RecordMetric(metrics_collector.UserRegistered))
+      send(state.metrics, metrics_collector.RecordMetric(metrics_collector.UserRegistered))
       UserSimulatorState(
         ..state,
         user_id: option.Some(user.id),
@@ -132,16 +136,16 @@ fn perform_activity(state: UserSimulatorState) -> UserSimulatorState {
       let activity_type =
         actor.call(
           state.activity_coordinator,
-          activity_coordinator.GetActivityType,
-          5000,
+          waiting: 5000,
+          sending: activity_coordinator.GetActivityType,
         )
 
       case activity_type {
-        activity_coordinator.CreatePost -> create_post(state, user_id)
-        activity_coordinator.CreateComment -> create_comment(state, user_id)
-        activity_coordinator.CastVote -> cast_vote(state, user_id)
-        activity_coordinator.SendDirectMessage -> send_dm(state, user_id)
-        activity_coordinator.JoinSubreddit -> join_subreddit(state, user_id)
+        CreatePost -> create_post(state, user_id)
+        CreateComment -> create_comment(state, user_id)
+        CastVote -> cast_vote(state, user_id)
+        SendDirectMessage -> send_dm(state, user_id)
+        JoinSubreddit -> join_subreddit(state, user_id)
       }
     }
     _, _ -> state
@@ -156,8 +160,8 @@ fn create_post(
   let subreddit_id =
     actor.call(
       state.activity_coordinator,
-      activity_coordinator.GetSubredditForActivity,
-      5000,
+      waiting: 5000,
+      sending: activity_coordinator.GetSubredditForActivity,
     )
 
   let title = "Post by " <> state.username <> " at " <> int.to_string(get_timestamp())
@@ -166,13 +170,13 @@ fn create_post(
   let result =
     actor.call(
       state.post_manager,
-      protocol.CreatePost(subreddit_id, user_id, title, content, _),
-      5000,
+      waiting: 5000,
+      sending: protocol.CreatePost(subreddit_id, user_id, title, content, _),
     )
 
   case result {
     types.PostSuccess(post) -> {
-      actor.send(state.metrics, metrics_collector.RecordMetric(metrics_collector.PostCreated))
+      send(state.metrics, metrics_collector.RecordMetric(metrics_collector.PostCreated))
       UserSimulatorState(..state, my_posts: [post.id, ..state.my_posts])
     }
     _ -> state
@@ -190,13 +194,13 @@ fn create_comment(
       let result =
         actor.call(
           state.comment_manager,
-          protocol.CreateComment(post_id, user_id, content, option.None, _),
-          5000,
+          waiting: 5000,
+          sending: protocol.CreateComment(post_id, user_id, content, option.None, _),
         )
 
       case result {
         types.CommentSuccess(comment) -> {
-          actor.send(state.metrics, metrics_collector.RecordMetric(metrics_collector.CommentCreated))
+          send(state.metrics, metrics_collector.RecordMetric(metrics_collector.CommentCreated))
           UserSimulatorState(..state, my_comments: [comment.id, ..state.my_comments])
         }
         _ -> state
@@ -213,17 +217,17 @@ fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
       let _ =
         actor.call(
           state.post_manager,
-          protocol.VotePost(post_id, user_id, types.Upvote, _),
-          5000,
+          waiting: 5000,
+          sending: protocol.VotePost(post_id, user_id, types.Upvote, _),
         )
-      actor.send(state.metrics, metrics_collector.RecordMetric(metrics_collector.VoteCast))
+      send(state.metrics, metrics_collector.RecordMetric(metrics_collector.VoteCast))
       state
     }
     Error(_) -> state
   }
 }
 
-fn send_dm(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
+fn send_dm(state: UserSimulatorState, _user_id: UserId) -> UserSimulatorState {
   // For now, skip DM sending as we'd need another user
   state
 }
@@ -236,8 +240,8 @@ fn join_subreddit(
   let subreddit_id =
     actor.call(
       state.activity_coordinator,
-      activity_coordinator.GetSubredditForActivity,
-      5000,
+      waiting: 5000,
+      sending: activity_coordinator.GetSubredditForActivity,
     )
 
   // Check if already joined
@@ -247,17 +251,17 @@ fn join_subreddit(
       let _ =
         actor.call(
           state.subreddit_manager,
-          protocol.JoinSubreddit(subreddit_id, user_id, _),
-          5000,
+          waiting: 5000,
+          sending: protocol.JoinSubreddit(subreddit_id, user_id, _),
         )
       let _ =
         actor.call(
           state.user_registry,
-          protocol.AddSubredditToUser(user_id, subreddit_id, _),
-          5000,
+          waiting: 5000,
+          sending: protocol.AddSubredditToUser(user_id, subreddit_id, _),
         )
       
-      actor.send(state.metrics, metrics_collector.RecordMetric(metrics_collector.SubredditJoined))
+      send(state.metrics, metrics_collector.RecordMetric(metrics_collector.SubredditJoined))
       UserSimulatorState(
         ..state,
         joined_subreddits: [subreddit_id, ..state.joined_subreddits],
@@ -272,8 +276,8 @@ fn go_online(state: UserSimulatorState) -> UserSimulatorState {
       let _ =
         actor.call(
           state.user_registry,
-          protocol.UpdateUserOnlineStatus(user_id, True, _),
-          5000,
+          waiting: 5000,
+          sending: protocol.UpdateUserOnlineStatus(user_id, True, _),
         )
       UserSimulatorState(..state, is_online: True)
     }
@@ -287,8 +291,8 @@ fn go_offline(state: UserSimulatorState) -> UserSimulatorState {
       let _ =
         actor.call(
           state.user_registry,
-          protocol.UpdateUserOnlineStatus(user_id, False, _),
-          5000,
+          waiting: 5000,
+          sending: protocol.UpdateUserOnlineStatus(user_id, False, _),
         )
       UserSimulatorState(..state, is_online: False)
     }
@@ -296,8 +300,11 @@ fn go_offline(state: UserSimulatorState) -> UserSimulatorState {
   }
 }
 
+@external(erlang, "erlang", "system_time")
+fn erlang_system_time() -> Int
+
 fn get_timestamp() -> Int {
-  process.system_time()
+  erlang_system_time()
   |> int.divide(1_000_000)
   |> result.unwrap(0)
 }

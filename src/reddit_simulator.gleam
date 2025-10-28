@@ -3,7 +3,6 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/otp/actor
-import gleam/result
 import reddit/client/activity_coordinator
 import reddit/client/metrics_collector
 import reddit/client/user_simulator
@@ -12,6 +11,7 @@ import reddit/engine/dm_manager
 import reddit/engine/post_manager
 import reddit/engine/subreddit_manager
 import reddit/engine/user_registry
+import reddit/protocol
 import reddit/types
 
 pub type SimulatorConfig {
@@ -50,11 +50,17 @@ pub fn run_simulation(config: SimulatorConfig) {
   // Start engine actors
   io.println("Starting engine actors...")
   
-  let assert Ok(user_registry_subject) = user_registry.start()
-  let assert Ok(subreddit_manager_subject) = subreddit_manager.start()
-  let assert Ok(post_manager_subject) = post_manager.start()
-  let assert Ok(comment_manager_subject) = comment_manager.start()
-  let assert Ok(dm_manager_subject) = dm_manager.start()
+  let assert Ok(user_registry_started) = user_registry.start()
+  let assert Ok(subreddit_manager_started) = subreddit_manager.start()
+  let assert Ok(post_manager_started) = post_manager.start()
+  let assert Ok(comment_manager_started) = comment_manager.start()
+  let assert Ok(dm_manager_started) = dm_manager.start()
+  
+  let user_registry_subject = user_registry_started.data
+  let subreddit_manager_subject = subreddit_manager_started.data
+  let post_manager_subject = post_manager_started.data
+  let comment_manager_subject = comment_manager_started.data
+  let dm_manager_subject = dm_manager_started.data
 
   io.println("✓ Engine actors started")
 
@@ -71,8 +77,8 @@ pub fn run_simulation(config: SimulatorConfig) {
       let result =
         actor.call(
           subreddit_manager_subject,
-          protocol.CreateSubreddit(name, "Subreddit about " <> name, creator_id, _),
-          5000,
+          waiting: 5000,
+          sending: protocol.CreateSubreddit(name, "Subreddit about " <> name, creator_id, _),
         )
       case result {
         types.SubredditSuccess(sub) -> {
@@ -87,12 +93,14 @@ pub fn run_simulation(config: SimulatorConfig) {
     })
 
   // Start metrics collector
-  let assert Ok(metrics_subject) = metrics_collector.start()
+  let assert Ok(metrics_started) = metrics_collector.start()
+  let metrics_subject = metrics_started.data
   
   // Start activity coordinator
   let activity_config = activity_coordinator.default_config()
-  let assert Ok(coordinator_subject) =
+  let assert Ok(coordinator_started) =
     activity_coordinator.start(activity_config, subreddit_ids)
+  let coordinator_subject = coordinator_started.data
 
   io.println("\n✓ Activity coordinator started")
 
@@ -101,7 +109,7 @@ pub fn run_simulation(config: SimulatorConfig) {
   let user_simulators =
     list.map(list.range(1, config.num_users), fn(i) {
       let username = "user_" <> int.to_string(i)
-      let assert Ok(simulator) =
+      let assert Ok(simulator_started) =
         user_simulator.start(
           username,
           user_registry_subject,
@@ -112,16 +120,17 @@ pub fn run_simulation(config: SimulatorConfig) {
           coordinator_subject,
           metrics_subject,
         )
+      let simulator = simulator_started.data
       
       // Initialize the user
-      actor.send(simulator, user_simulator.Initialize)
+      process.send(simulator, user_simulator.Initialize)
       simulator
     })
 
   io.println("✓ Started " <> int.to_string(config.num_users) <> " user simulators")
 
   // Update active users count
-  actor.send(metrics_subject, metrics_collector.SetActiveUsers(config.num_users))
+  process.send(metrics_subject, metrics_collector.SetActiveUsers(config.num_users))
 
   // Run simulation cycles
   io.println("\n=== Running Simulation ===")
@@ -135,15 +144,19 @@ pub fn run_simulation(config: SimulatorConfig) {
   // Print final report
   io.println("\n=== Simulation Complete ===")
   let report =
-    actor.call(metrics_subject, metrics_collector.GetReport, 5000)
+    actor.call(
+      metrics_subject,
+      waiting: 5000,
+      sending: metrics_collector.GetReport,
+    )
   metrics_collector.print_report(report)
 
   io.println("Simulation finished successfully!")
 }
 
 fn run_activity_cycles(
-  user_simulators: List(actor.Subject(user_simulator.UserSimulatorMessage)),
-  metrics: actor.Subject(metrics_collector.MetricsMessage),
+  user_simulators: List(process.Subject(user_simulator.UserSimulatorMessage)),
+  metrics: process.Subject(metrics_collector.MetricsMessage),
   cycles: Int,
   delay_ms: Int,
 ) -> Nil {
@@ -157,7 +170,7 @@ fn run_activity_cycles(
 
       // Have each user perform an activity
       list.each(user_simulators, fn(simulator) {
-        actor.send(simulator, user_simulator.PerformActivity)
+        process.send(simulator, user_simulator.PerformActivity)
       })
 
       // Wait before next cycle

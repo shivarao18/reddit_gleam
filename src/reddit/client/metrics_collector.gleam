@@ -1,11 +1,11 @@
 import gleam/dict.{type Dict}
-import gleam/erlang/process
+import gleam/erlang/process.{type Subject, send}
+import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
 import gleam/otp/actor
 import gleam/result
-import gleam/string
 
 pub type MetricType {
   PostCreated
@@ -37,7 +37,7 @@ pub type MetricsMessage {
   RecordMetric(metric_type: MetricType)
   RecordLatency(operation: String, duration_ms: Int)
   SetActiveUsers(count: Int)
-  GetReport(reply: actor.Subject(MetricsReport))
+  GetReport(Subject(MetricsReport))
   Reset
 }
 
@@ -52,7 +52,7 @@ pub type MetricsReport {
   )
 }
 
-pub fn start() -> Result(actor.StartResult(MetricsMessage), actor.StartError) {
+pub fn start() -> actor.StartResult(Subject(MetricsMessage)) {
   let timestamp = get_timestamp()
   let initial_state =
     State(
@@ -62,13 +62,13 @@ pub fn start() -> Result(actor.StartResult(MetricsMessage), actor.StartError) {
       start_time: timestamp,
       active_users: 0,
     )
-  actor.start(initial_state, handle_message)
+  let builder =
+    actor.new(initial_state)
+    |> actor.on_message(handle_message)
+  actor.start(builder)
 }
 
-fn handle_message(
-  message: MetricsMessage,
-  state: State,
-) -> actor.Next(MetricsMessage, State) {
+fn handle_message(state: State, message: MetricsMessage) -> actor.Next(State, MetricsMessage) {
   case message {
     RecordMetric(metric_type) -> {
       let metric_name = metric_type_to_string(metric_type)
@@ -102,7 +102,7 @@ fn handle_message(
 
     GetReport(reply) -> {
       let report = generate_report(state)
-      actor.send(reply, report)
+      send(reply, report)
       actor.continue(state)
     }
 
@@ -176,8 +176,11 @@ fn metric_type_to_string(metric_type: MetricType) -> String {
   }
 }
 
+@external(erlang, "erlang", "system_time")
+fn erlang_system_time() -> Int
+
 fn get_timestamp() -> Int {
-  process.system_time()
+  erlang_system_time()
   |> int.divide(1_000_000)
   |> result.unwrap(0)
 }

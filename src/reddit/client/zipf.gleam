@@ -78,18 +78,10 @@ fn float_power(base: Float, exp: Float) -> Float {
     1.0 -> base
     _ -> {
       // For positive integer exponents
-      case float.truncate(exp) {
-        Ok(int_exp) -> {
-          case int_exp == 0 {
-            True -> 1.0
-            False -> float_power_int(base, int_exp)
-          }
-        }
-        Error(_) -> {
-          // Fallback for non-integer exponents
-          // Using e^(exp * ln(base))
-          base  // Simplified for now
-        }
+      let int_exp = float.truncate(exp)
+      case int_exp == 0 {
+        True -> 1.0
+        False -> float_power_int(base, int_exp)
       }
     }
   }

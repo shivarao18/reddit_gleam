@@ -1,4 +1,3 @@
-import gleam/dict.{type Dict}
 import gleam/option.{type Option}
 
 // Core ID types for type safety

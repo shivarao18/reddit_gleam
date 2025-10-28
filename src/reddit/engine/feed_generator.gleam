@@ -1,5 +1,6 @@
+import gleam/erlang/process.{type Subject, send}
 import gleam/list
-import gleam/otp/actor.{type Subject}
+import gleam/otp/actor
 import gleam/result
 import reddit/protocol.{
   type FeedGeneratorMessage, type PostManagerMessage, type SubredditManagerMessage,
@@ -22,24 +23,28 @@ pub fn start(
   post_manager: Subject(PostManagerMessage),
   subreddit_manager: Subject(SubredditManagerMessage),
   user_registry: Subject(UserRegistryMessage),
-) -> Result(actor.StartResult(FeedGeneratorMessage), actor.StartError) {
+) -> actor.StartResult(Subject(FeedGeneratorMessage)) {
   let initial_state =
     State(
       post_manager: post_manager,
       subreddit_manager: subreddit_manager,
       user_registry: user_registry,
     )
-  actor.start(initial_state, handle_message)
+  
+  let builder =
+    actor.new(initial_state)
+    |> actor.on_message(handle_message)
+  actor.start(builder)
 }
 
 fn handle_message(
-  message: FeedGeneratorMessage,
   state: State,
-) -> actor.Next(FeedGeneratorMessage, State) {
+  message: FeedGeneratorMessage,
+) -> actor.Next(State, FeedGeneratorMessage) {
   case message {
     protocol.GetFeed(user_id, limit, reply) -> {
       let feed = generate_feed(state, user_id, limit)
-      actor.send(reply, feed)
+      send(reply, feed)
       actor.continue(state)
     }
   }
@@ -51,7 +56,7 @@ fn generate_feed(
   limit: Int,
 ) -> List(FeedPost) {
   // Get user's joined subreddits
-  let user_result = actor.call(state.user_registry, protocol.GetUser(user_id, _), 5000)
+  let user_result = actor.call(state.user_registry, waiting: 5000, sending: protocol.GetUser(user_id, _))
   
   case user_result {
     UserSuccess(user) -> {
@@ -61,8 +66,8 @@ fn generate_feed(
           let posts =
             actor.call(
               state.post_manager,
-              protocol.GetPostsBySubreddit(subreddit_id, _),
-              5000,
+              waiting: 5000,
+              sending: protocol.GetPostsBySubreddit(subreddit_id, _),
             )
           
           // Enrich posts with subreddit and author info
@@ -96,13 +101,13 @@ fn enrich_post(state: State, post: Post) -> Result(FeedPost, Nil) {
   let subreddit_result =
     actor.call(
       state.subreddit_manager,
-      protocol.GetSubreddit(post.subreddit_id, _),
-      5000,
+      waiting: 5000,
+      sending: protocol.GetSubreddit(post.subreddit_id, _),
     )
 
   // Get author username
   let author_result =
-    actor.call(state.user_registry, protocol.GetUser(post.author_id, _), 5000)
+    actor.call(state.user_registry, waiting: 5000, sending: protocol.GetUser(post.author_id, _))
 
   case subreddit_result, author_result {
     SubredditSuccess(subreddit), UserSuccess(author) -> {

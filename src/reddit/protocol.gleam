@@ -1,10 +1,10 @@
-import gleam/otp/actor.{type Subject}
+import gleam/erlang/process.{type Subject}
 import gleam/option.{type Option}
 import reddit/types.{
   type Comment, type CommentId, type CommentResult, type DirectMessage,
   type DirectMessageId, type DirectMessageResult, type FeedPost, type Post,
   type PostId, type PostResult, type RegistrationResult, type Subreddit,
-  type SubredditId, type SubredditResult, type User, type UserId, type UserResult,
+  type SubredditId, type SubredditResult, type UserId, type UserResult,
   type VoteType,
 }
 

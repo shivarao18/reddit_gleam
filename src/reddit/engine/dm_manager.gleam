@@ -1,5 +1,5 @@
 import gleam/dict.{type Dict}
-import gleam/erlang/process
+import gleam/erlang/process.{type Subject, send}
 import gleam/int
 import gleam/list
 import gleam/option.{type Option}
@@ -21,37 +21,41 @@ pub type State {
   )
 }
 
-pub fn start() -> Result(actor.StartResult(DirectMessageManagerMessage), actor.StartError) {
+pub fn start() -> actor.StartResult(Subject(DirectMessageManagerMessage)) {
   let initial_state =
     State(
       messages: dict.new(),
       messages_by_user: dict.new(),
       next_id: 1,
     )
-  actor.start(initial_state, handle_message)
+  
+  let builder =
+    actor.new(initial_state)
+    |> actor.on_message(handle_message)
+  actor.start(builder)
 }
 
 fn handle_message(
-  message: DirectMessageManagerMessage,
   state: State,
-) -> actor.Next(DirectMessageManagerMessage, State) {
+  message: DirectMessageManagerMessage,
+) -> actor.Next(State, DirectMessageManagerMessage) {
   case message {
     protocol.SendDirectMessage(from_user_id, to_user_id, content, reply_to_id, reply) -> {
       let #(result, new_state) =
         send_direct_message(state, from_user_id, to_user_id, content, reply_to_id)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.GetDirectMessages(user_id, reply) -> {
       let messages = get_direct_messages(state, user_id)
-      actor.send(reply, messages)
+      send(reply, messages)
       actor.continue(state)
     }
 
     protocol.GetConversation(user1_id, user2_id, reply) -> {
       let messages = get_conversation(state, user1_id, user2_id)
-      actor.send(reply, messages)
+      send(reply, messages)
       actor.continue(state)
     }
   }
@@ -151,8 +155,11 @@ fn get_conversation(
 }
 
 // Helper functions
+@external(erlang, "erlang", "system_time")
+fn erlang_system_time() -> Int
+
 fn get_timestamp() -> Int {
-  process.system_time()
+  erlang_system_time()
   |> int.divide(1_000_000)
   |> result.unwrap(0)
 }

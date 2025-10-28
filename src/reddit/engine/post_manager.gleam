@@ -1,5 +1,5 @@
 import gleam/dict.{type Dict}
-import gleam/erlang/process
+import gleam/erlang/process.{type Subject, send}
 import gleam/int
 import gleam/list
 import gleam/otp/actor
@@ -20,7 +20,7 @@ pub type State {
   )
 }
 
-pub fn start() -> Result(actor.StartResult(PostManagerMessage), actor.StartError) {
+pub fn start() -> actor.StartResult(Subject(PostManagerMessage)) {
   let initial_state =
     State(
       posts: dict.new(),
@@ -28,35 +28,39 @@ pub fn start() -> Result(actor.StartResult(PostManagerMessage), actor.StartError
       post_votes: dict.new(),
       next_id: 1,
     )
-  actor.start(initial_state, handle_message)
+  
+  let builder =
+    actor.new(initial_state)
+    |> actor.on_message(handle_message)
+  actor.start(builder)
 }
 
 fn handle_message(
-  message: PostManagerMessage,
   state: State,
-) -> actor.Next(PostManagerMessage, State) {
+  message: PostManagerMessage,
+) -> actor.Next(State, PostManagerMessage) {
   case message {
     protocol.CreatePost(subreddit_id, author_id, title, content, reply) -> {
       let #(result, new_state) = create_post(state, subreddit_id, author_id, title, content)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.GetPost(post_id, reply) -> {
       let result = get_post(state, post_id)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(state)
     }
 
     protocol.GetPostsBySubreddit(subreddit_id, reply) -> {
       let posts = get_posts_by_subreddit(state, subreddit_id)
-      actor.send(reply, posts)
+      send(reply, posts)
       actor.continue(state)
     }
 
     protocol.VotePost(post_id, user_id, vote_type, reply) -> {
       let #(result, new_state) = vote_post(state, post_id, user_id, vote_type)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
   }
@@ -183,8 +187,11 @@ fn vote_post(
 }
 
 // Helper functions
+@external(erlang, "erlang", "system_time")
+fn erlang_system_time() -> Int
+
 fn get_timestamp() -> Int {
-  process.system_time()
+  erlang_system_time()
   |> int.divide(1_000_000)
   |> result.unwrap(0)
 }

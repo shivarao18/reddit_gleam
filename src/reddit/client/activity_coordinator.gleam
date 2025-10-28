@@ -1,6 +1,5 @@
 import gleam/dict.{type Dict}
 import gleam/erlang/process
-import gleam/int
 import gleam/list
 import gleam/otp/actor
 import gleam/result
@@ -28,10 +27,10 @@ pub type State {
 }
 
 pub type ActivityCoordinatorMessage {
-  GetSubredditForActivity(reply: actor.Subject(SubredditId))
-  GetActivityType(reply: actor.Subject(ActivityType))
+  GetSubredditForActivity(process.Subject(SubredditId))
+  GetActivityType(process.Subject(ActivityType))
   RecordActivity(subreddit_id: SubredditId)
-  GetStats(reply: actor.Subject(ActivityStats))
+  GetStats(process.Subject(ActivityStats))
 }
 
 pub type ActivityType {
@@ -60,10 +59,7 @@ pub fn default_config() -> ActivityConfig {
   )
 }
 
-pub fn start(config: ActivityConfig, subreddits: List(SubredditId)) -> Result(
-  actor.StartResult(ActivityCoordinatorMessage),
-  actor.StartError,
-) {
+pub fn start(config: ActivityConfig, subreddits: List(SubredditId)) -> actor.StartResult(process.Subject(ActivityCoordinatorMessage)) {
   let zipf_dist = zipf.new(config.num_subreddits, config.zipf_exponent)
   let initial_state =
     State(
@@ -72,23 +68,27 @@ pub fn start(config: ActivityConfig, subreddits: List(SubredditId)) -> Result(
       popular_subreddits: subreddits,
       subreddit_activity: dict.new(),
     )
-  actor.start(initial_state, handle_message)
+
+  let builder =
+    actor.new(initial_state)
+    |> actor.on_message(handle_message)
+  actor.start(builder)
 }
 
 fn handle_message(
-  message: ActivityCoordinatorMessage,
   state: State,
-) -> actor.Next(ActivityCoordinatorMessage, State) {
+  message: ActivityCoordinatorMessage,
+) -> actor.Next(State, ActivityCoordinatorMessage) {
   case message {
     GetSubredditForActivity(reply) -> {
       let subreddit = select_subreddit(state)
-      actor.send(reply, subreddit)
+      process.send(reply, subreddit)
       actor.continue(state)
     }
 
     GetActivityType(reply) -> {
       let activity = select_activity_type(state.config)
-      actor.send(reply, activity)
+      process.send(reply, activity)
       actor.continue(state)
     }
 
@@ -112,26 +112,21 @@ fn handle_message(
           total_activities: total,
           subreddit_activity: state.subreddit_activity,
         )
-      actor.send(reply, stats)
+      process.send(reply, stats)
       actor.continue(state)
     }
   }
 }
 
 fn select_subreddit(state: State) -> SubredditId {
-  // Use Zipf distribution to select a subreddit
   let random = generate_random()
   let rank = zipf.sample(state.zipf_dist, random)
-  
-  // Get subreddit at this rank (1-indexed)
-  case list.at(state.popular_subreddits, rank - 1) {
+  let after_drop = list.drop(state.popular_subreddits, rank - 1)
+  case list.first(after_drop) {
     Ok(subreddit) -> subreddit
-    Error(_) -> {
-      // Fallback to first subreddit
-      case list.first(state.popular_subreddits) {
-        Ok(sub) -> sub
-        Error(_) -> "default_subreddit"
-      }
+    Error(_) -> case list.first(state.popular_subreddits) {
+      Ok(sub) -> sub
+      Error(_) -> "default_subreddit"
     }
   }
 }

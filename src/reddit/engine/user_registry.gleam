@@ -1,5 +1,5 @@
 import gleam/dict.{type Dict}
-import gleam/erlang/process
+import gleam/erlang/process.{type Subject, send}
 import gleam/int
 import gleam/otp/actor
 import gleam/result
@@ -19,55 +19,59 @@ pub type State {
   )
 }
 
-pub fn start() -> Result(actor.StartResult(UserRegistryMessage), actor.StartError) {
+pub fn start() -> actor.StartResult(Subject(UserRegistryMessage)) {
   let initial_state = State(users: dict.new(), username_to_id: dict.new(), next_id: 1)
-  actor.start(initial_state, handle_message)
+  
+  let builder =
+    actor.new(initial_state)
+    |> actor.on_message(handle_message)
+  actor.start(builder)
 }
 
 fn handle_message(
-  message: UserRegistryMessage,
   state: State,
-) -> actor.Next(UserRegistryMessage, State) {
+  message: UserRegistryMessage,
+) -> actor.Next(State, UserRegistryMessage) {
   case message {
     protocol.RegisterUser(username, reply) -> {
       let #(result, new_state) = register_user(state, username)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.GetUser(user_id, reply) -> {
       let result = get_user(state, user_id)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(state)
     }
 
     protocol.GetUserByUsername(username, reply) -> {
       let result = get_user_by_username(state, username)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(state)
     }
 
     protocol.UpdateUserOnlineStatus(user_id, is_online, reply) -> {
       let #(result, new_state) = update_user_online_status(state, user_id, is_online)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.AddSubredditToUser(user_id, subreddit_id, reply) -> {
       let #(result, new_state) = add_subreddit_to_user(state, user_id, subreddit_id)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.RemoveSubredditFromUser(user_id, subreddit_id, reply) -> {
       let #(result, new_state) = remove_subreddit_from_user(state, user_id, subreddit_id)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.UpdateUserKarma(user_id, karma_delta, reply) -> {
       let #(result, new_state) = update_user_karma(state, user_id, karma_delta)
-      actor.send(reply, result)
+      send(reply, result)
       actor.continue(new_state)
     }
   }
@@ -202,8 +206,11 @@ fn update_user_karma(
 }
 
 // Helper functions
+@external(erlang, "erlang", "system_time")
+fn erlang_system_time() -> Int
+
 fn get_timestamp() -> Int {
-  process.system_time()
+  erlang_system_time()
   |> int.divide(1_000_000)
   |> result.unwrap(0)
 }
