@@ -156,7 +156,7 @@ pub fn run_simulation(config: SimulatorConfig) {
 
 fn run_activity_cycles(
   user_simulators: List(process.Subject(user_simulator.UserSimulatorMessage)),
-  metrics: process.Subject(metrics_collector.MetricsMessage),
+  _metrics: process.Subject(metrics_collector.MetricsMessage),
   cycles: Int,
   delay_ms: Int,
 ) -> Nil {
@@ -176,7 +176,7 @@ fn run_activity_cycles(
       // Wait before next cycle
       process.sleep(delay_ms)
 
-      run_activity_cycles(user_simulators, metrics, cycles - 1, delay_ms)
+      run_activity_cycles(user_simulators, _metrics, cycles - 1, delay_ms)
     }
     False -> Nil
   }

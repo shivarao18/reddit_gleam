@@ -1,14 +1,14 @@
 import gleam/erlang/process.{type Subject, send}
 import gleam/list
 import gleam/otp/actor
-import gleam/result
+import gleam/order
 import reddit/protocol.{
   type FeedGeneratorMessage, type PostManagerMessage, type SubredditManagerMessage,
   type UserRegistryMessage,
 }
 import reddit/types.{
-  type FeedPost, type Post, type Subreddit, type User, FeedPost as FeedPostType,
-  PostSuccess, SubredditSuccess, UserSuccess,
+  type FeedPost, type Post, FeedPost as FeedPostType, SubredditSuccess,
+  UserSuccess,
 }
 
 pub type State {
@@ -81,7 +81,7 @@ fn generate_feed(
         list.sort(all_posts, fn(a, b) {
           // First sort by score
           case compare_int(b.score, a.score) {
-            0 -> {
+            order.Eq -> {
               // If scores are equal, sort by created_at (newer first)
               compare_int(b.post.created_at, a.post.created_at)
             }
@@ -123,13 +123,13 @@ fn enrich_post(state: State, post: Post) -> Result(FeedPost, Nil) {
   }
 }
 
-fn compare_int(a: Int, b: Int) -> Int {
+fn compare_int(a: Int, b: Int) -> order.Order {
   case a > b {
-    True -> 1
+    True -> order.Gt
     False ->
       case a < b {
-        True -> -1
-        False -> 0
+        True -> order.Lt
+        False -> order.Eq
       }
   }
 }

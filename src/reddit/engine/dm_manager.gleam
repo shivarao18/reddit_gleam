@@ -9,7 +9,7 @@ import gleam/string
 import reddit/protocol.{type DirectMessageManagerMessage}
 import reddit/types.{
   type DirectMessage, type DirectMessageId, type DirectMessageResult, type UserId,
-  DirectMessage as DirectMessageType, DirectMessageError, DirectMessageNotFound,
+  DirectMessage as DirectMessageType, DirectMessageError,
   DirectMessageSuccess,
 }
 

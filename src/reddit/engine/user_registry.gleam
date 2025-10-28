@@ -7,7 +7,7 @@ import gleam/string
 import reddit/protocol.{type UserRegistryMessage}
 import reddit/types.{
   type RegistrationResult, type User, type UserId, type UserResult,
-  RegistrationError, RegistrationSuccess, UserError, UserNotFound, UserSuccess,
+  RegistrationError, RegistrationSuccess, UserNotFound, UserSuccess,
   User as UserType,
 }
 
