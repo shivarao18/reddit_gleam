@@ -1,3 +1,7 @@
+// Activity Coordinator - Manages activity scheduling and coordination
+// This actor coordinates user activities using a Zipf distribution for realistic
+// subreddit selection patterns, ensuring popular subreddits get more activity.
+
 import gleam/dict.{type Dict}
 import gleam/erlang/process
 import gleam/list

@@ -1,3 +1,7 @@
+// Feed Generator - Generates personalized user feeds
+// This actor creates customized feeds for users by retrieving posts from
+// subreddits they follow and sorting by score and recency.
+
 import gleam/erlang/process.{type Subject, send}
 import gleam/list
 import gleam/otp/actor

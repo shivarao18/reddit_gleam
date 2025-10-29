@@ -1,3 +1,7 @@
+// Post Manager - Manages posts and voting
+// This actor handles post creation, retrieval, voting (upvotes/downvotes),
+// and maintains post scores and comment lists.
+
 import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject, send}
 import gleam/int

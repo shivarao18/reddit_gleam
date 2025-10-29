@@ -1,3 +1,7 @@
+// Karma Calculator - Calculates user karma scores
+// This actor computes karma points for users based on their posts and comments,
+// aggregating upvotes and downvotes to determine reputation scores.
+
 import gleam/erlang/process.{type Subject, send}
 import gleam/otp/actor
 import reddit/protocol.{

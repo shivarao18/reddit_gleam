@@ -1,3 +1,7 @@
+// Metrics Collector - Tracks and reports simulation statistics
+// This actor collects metrics about all activities in the simulation
+// (posts, comments, votes, messages, etc.) and generates statistical reports.
+
 import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject, send}
 import gleam/float

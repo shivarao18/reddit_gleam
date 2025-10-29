@@ -1,3 +1,7 @@
+// Subreddit Manager - Manages subreddit communities
+// This actor handles subreddit creation, retrieval, user memberships,
+// and tracks member lists for each subreddit community.
+
 import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject, send}
 import gleam/int

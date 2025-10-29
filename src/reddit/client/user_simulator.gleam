@@ -1,3 +1,7 @@
+// User Simulator - Simulates individual user behavior
+// Each user simulator actor represents a single user and performs various activities
+// such as creating posts, commenting, voting, joining subreddits, and sending DMs.
+
 import gleam/erlang/process.{type Subject, send}
 import gleam/int
 import gleam/list

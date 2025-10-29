@@ -1,3 +1,7 @@
+// Direct Message Manager - Manages private messages between users
+// This actor handles sending, retrieving, and managing direct messages,
+// including conversation threads and read/unread status.
+
 import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject, send}
 import gleam/int

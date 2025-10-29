@@ -1,3 +1,7 @@
+// Comment Manager - Manages comments and comment threads
+// This actor handles comment creation, retrieval, voting on comments,
+// and maintains the hierarchical structure of comment threads with replies.
+
 import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject, send}
 import gleam/int

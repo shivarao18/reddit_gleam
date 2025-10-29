@@ -1,3 +1,6 @@
+// Reddit Clone Tests
+// Basic unit tests for core data types and the Zipf distribution.
+
 import gleeunit
 import reddit/types
 import reddit/client/zipf

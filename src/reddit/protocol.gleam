@@ -1,3 +1,8 @@
+// Protocol - Message definitions for actor communication
+// This file defines all the message types used for communication between actors,
+// including messages for user registry, subreddit management, posts, comments,
+// direct messages, karma calculation, and feed generation.
+
 import gleam/erlang/process.{type Subject}
 import gleam/option.{type Option}
 import reddit/types.{

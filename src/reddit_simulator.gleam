@@ -1,3 +1,9 @@
+// Reddit Clone Simulator - Main simulation orchestrator
+// This file sets up and runs the complete Reddit simulation, including:
+// - Engine actors (user registry, subreddit manager, post manager, etc.)
+// - Client actors (user simulators, activity coordinator, metrics collector)
+// - Simulation configuration and execution
+
 import gleam/erlang/process
 import gleam/int
 import gleam/io

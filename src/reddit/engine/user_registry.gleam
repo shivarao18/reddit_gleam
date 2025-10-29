@@ -1,3 +1,7 @@
+// User Registry - Manages user accounts and authentication
+// This actor handles user registration, retrieval, and maintains a registry
+// of all users in the system with unique IDs and usernames.
+
 import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject, send}
 import gleam/int

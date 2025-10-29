@@ -1,3 +1,8 @@
+// Types - Core data types and structures
+// This file defines all the data types used throughout the Reddit clone,
+// including users, subreddits, posts, comments, direct messages, votes,
+// and their associated result types.
+
 import gleam/option.{type Option}
 
 // Core ID types for type safety

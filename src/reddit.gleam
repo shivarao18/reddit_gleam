@@ -1,3 +1,6 @@
+// Reddit Clone - Entry point
+// This is the main entry point for the application that starts the Reddit simulator.
+
 import gleam/io
 import reddit_simulator
 
