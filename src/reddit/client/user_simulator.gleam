@@ -216,19 +216,39 @@ fn create_comment(
 }
 
 fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
-  // Vote on one of our posts
-  case list.first(state.my_posts) {
-    Ok(post_id) -> {
-      let _ =
-        actor.call(
-          state.post_manager,
-          waiting: 5000,
-          sending: protocol.VotePost(post_id, user_id, types.Upvote, _),
-        )
-      send(state.metrics, metrics_collector.RecordMetric(metrics_collector.VoteCast))
-      state
+  // Get all posts to vote on (not just our own!)
+  let all_posts =
+    actor.call(
+      state.post_manager,
+      waiting: 5000,
+      sending: protocol.GetAllPosts,
+    )
+  
+  // Pick a random post
+  case list.length(all_posts) {
+    0 -> state
+    len -> {
+      let random_index = erlang_uniform(len) - 1
+      case list.drop(all_posts, random_index) |> list.first() {
+        Ok(post) -> {
+          // Randomly choose upvote or downvote (70% upvote, 30% downvote for realistic Reddit)
+          let vote_type = case erlang_uniform(10) {
+            n if n <= 7 -> types.Upvote
+            _ -> types.Downvote
+          }
+          
+          let _ =
+            actor.call(
+              state.post_manager,
+              waiting: 5000,
+              sending: protocol.VotePost(post.id, user_id, vote_type, _),
+            )
+          send(state.metrics, metrics_collector.RecordMetric(metrics_collector.VoteCast))
+          state
+        }
+        Error(_) -> state
+      }
     }
-    Error(_) -> state
   }
 }
 
