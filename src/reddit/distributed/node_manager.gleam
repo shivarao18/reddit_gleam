@@ -1,6 +1,7 @@
 // Node Manager - High-level distributed node management
 // Provides easy-to-use functions for setting up distributed Erlang nodes
 
+import gleam/dynamic.{type Dynamic}
 import gleam/erlang/atom
 import gleam/erlang/process.{type Pid, type Subject}
 import gleam/int
@@ -26,7 +27,7 @@ const cookie = "reddit_distributed_secret_2024"
 pub fn init_node(node_type: NodeType) -> Result(String, ConnectionError) {
   // Check if node is already started (via erl -name flag)
   let current = erlang_ffi.get_current_node_name()
-  
+
   case current {
     // Already distributed (started with erl -name)
     name if name != "nonode@nohost" -> {
@@ -39,12 +40,12 @@ pub fn init_node(node_type: NodeType) -> Result(String, ConnectionError) {
         EngineNode -> "engine"
         ClientNode(id) -> "client" <> int.to_string(id)
       }
-      
+
       case erlang_ffi.start_node(node_name, "shortnames") {
         Ok(_pid) -> {
           // Set cookie AFTER node is started
           let _cookie_set = erlang_ffi.set_cookie(cookie)
-          
+
           let full_name = erlang_ffi.get_current_node_name()
           io.println("✓ Started distributed node: " <> full_name)
           Ok(full_name)
@@ -62,9 +63,9 @@ pub fn init_node(node_type: NodeType) -> Result(String, ConnectionError) {
 pub fn connect_to_engine() -> Result(Nil, ConnectionError) {
   // Use 127.0.0.1 to match the erl -name flags
   let engine_node = "engine@127.0.0.1"
-  
+
   io.println("Connecting to engine node: " <> engine_node)
-  
+
   case erlang_ffi.connect_to_node(engine_node) {
     Ok(_) -> {
       io.println("✓ Connected to engine node")
@@ -81,7 +82,7 @@ pub fn connect_to_engine() -> Result(Nil, ConnectionError) {
 pub fn is_engine_alive() -> Bool {
   // Use 127.0.0.1 to match the erl -name flags
   let engine_node = "engine@127.0.0.1"
-  
+
   case erlang_ffi.connect_to_node(engine_node) {
     Ok(_) -> True
     Error(_) -> False
@@ -94,7 +95,7 @@ pub fn register_global(
   subject: Subject(a),
 ) -> Result(Nil, ConnectionError) {
   let pid = erlang_ffi.subject_to_pid(subject)
-  
+
   case erlang_ffi.register_global_pid(name, pid) {
     Ok(_) -> {
       io.println("✓ Registered globally: " <> name)
@@ -181,3 +182,18 @@ fn get_hostname() -> String {
   hostname
 }
 
+/// Make a distributed call to a remote actor
+/// This works across nodes, unlike actor.call()
+pub fn distributed_call(
+  subject: Subject(msg),
+  message: msg,
+  timeout_ms: Int,
+) -> Dynamic {
+  erlang_ffi.distributed_call(subject, message, timeout_ms)
+}
+
+/// Convert a Dynamic result to the expected type
+/// This is safe because Erlang terms are already properly typed
+pub fn dynamic_to_any(value: Dynamic) -> a {
+  erlang_ffi.dynamic_to_any(value)
+}

@@ -8,6 +8,9 @@ echo ""
 # Build first
 gleam build
 
+# Compile Erlang FFI module
+erlc -o build/dev/erlang/reddit/ebin priv/reddit_distributed_ffi.erl
+
 # Generate random client ID
 CLIENT_ID=${1:-$RANDOM}
 

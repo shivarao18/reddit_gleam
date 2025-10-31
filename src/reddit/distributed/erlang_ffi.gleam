@@ -91,13 +91,17 @@ pub fn whereis_global(name: String) -> Result(Pid, String) {
   
   case dynamic.classify(result) {
     "Atom" -> Error("Process not found: " <> name)
-    "Pid" -> Ok(unsafe_dynamic_to_pid(result))
+    "Pid" -> {
+      // Use Erlang FFI to convert Dynamic to Pid
+      Ok(dynamic_to_pid(result))
+    }
     _ -> Error("Unexpected result for: " <> name)
   }
 }
 
-@external(erlang, "erlang", "binary_to_term")
-fn unsafe_dynamic_to_pid(dynamic: Dynamic) -> Pid
+// Convert Dynamic (which is a Pid) to Pid type
+@external(erlang, "reddit_distributed_ffi", "dynamic_to_pid")
+fn dynamic_to_pid(dyn: Dynamic) -> Pid
 
 /// Unregister a globally registered process
 @external(erlang, "global", "unregister_name")
@@ -127,4 +131,19 @@ fn list_atoms_to_strings(atoms: List(Atom)) -> List(String) {
     [head, ..tail] -> [atom.to_string(head), ..list_atoms_to_strings(tail)]
   }
 }
+
+/// Distributed call - works across nodes
+/// This bypasses Gleam's actor.call() which doesn't work for remote actors
+/// Returns a Dynamic that needs to be decoded
+@external(erlang, "reddit_distributed_ffi", "distributed_call")
+pub fn distributed_call(
+  subject: Subject(msg),
+  message: msg,
+  timeout: Int,
+) -> Dynamic
+
+/// Convert Dynamic to any type (identity function)
+/// Safe because Erlang terms are already in the correct representation
+@external(erlang, "reddit_distributed_ffi", "dynamic_to_any")
+pub fn dynamic_to_any(value: Dynamic) -> a
 

@@ -5,6 +5,7 @@
 // IMPORTANT: The engine MUST be running first!
 // Start engine: gleam run -m reddit_engine_standalone
 
+import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process
 import gleam/int
 import gleam/io
@@ -243,17 +244,19 @@ fn get_or_create_subreddits(
   
   list.index_map(list.take(subreddit_names, num), fn(name, idx) {
     let creator_id = "system"
-    let result =
-      actor.call(
-        subreddit_manager,
-        waiting: 5000,
-        sending: protocol.CreateSubreddit(
-          name,
-          "Subreddit about " <> name,
-          creator_id,
-          _,
-        ),
-      )
+    // Use distributed_call for remote actors
+    let result_dynamic = node_manager.distributed_call(
+      subreddit_manager,
+      protocol.CreateSubreddit(
+        name,
+        "Subreddit about " <> name,
+        creator_id,
+        process.new_subject(),
+      ),
+      5000,
+    )
+    // Convert the dynamic result to the expected type
+    let result: types.SubredditResult = node_manager.dynamic_to_any(result_dynamic)
     case result {
       types.SubredditSuccess(sub) -> sub.id
       _ -> "sub_" <> int.to_string(idx + 1)
