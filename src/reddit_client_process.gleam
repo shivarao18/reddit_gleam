@@ -12,6 +12,7 @@ import reddit/client/metrics_collector
 import reddit/client/user_simulator
 import reddit/engine/comment_manager
 import reddit/engine/dm_manager
+import reddit/engine/feed_generator
 import reddit/engine/post_manager
 import reddit/engine/subreddit_manager
 import reddit/engine/user_registry
@@ -40,7 +41,7 @@ pub fn main() {
   let config =
     ClientProcessConfig(
       process_id: 1,
-      num_users: 10,
+      num_users: 100,
       num_subreddits: 10,
       activity_cycles: 100,
       cycle_delay_ms: 100,
@@ -78,6 +79,14 @@ pub fn run_client_process(config: ClientProcessConfig) {
   let post_manager_subject = post_manager_started.data
   let comment_manager_subject = comment_manager_started.data
   let dm_manager_subject = dm_manager_started.data
+  
+  // Start feed generator
+  let assert Ok(feed_generator_started) = feed_generator.start(
+    post_manager_subject,
+    subreddit_manager_subject,
+    user_registry_subject,
+  )
+  let feed_generator_subject = feed_generator_started.data
   
   // Get or create subreddits
   let subreddit_ids = get_or_create_subreddits(subreddit_manager_subject, config.num_subreddits)
@@ -149,6 +158,13 @@ pub fn run_client_process(config: ClientProcessConfig) {
     )
   metrics_collector.print_report(report)
   
+  // Display a sample user's feed to demonstrate feed functionality
+  display_sample_feed(
+    user_registry_subject,
+    feed_generator_subject,
+    config.username_prefix,
+  )
+  
   io.println("Client process finished!")
 }
 
@@ -208,6 +224,103 @@ fn run_activity_cycles(
     }
     False -> Nil
   }
+}
+
+fn display_sample_feed(
+  user_registry: process.Subject(protocol.UserRegistryMessage),
+  feed_generator: process.Subject(protocol.FeedGeneratorMessage),
+  username_prefix: String,
+) -> Nil {
+  io.println("")
+  io.println("╔══════════════════════════════════════════════════════════════╗")
+  io.println("║            SAMPLE USER FEED (Feed Functionality)            ║")
+  io.println("╚══════════════════════════════════════════════════════════════╝")
+  io.println("")
+  
+  // Pick a sample user from this client process
+  // Format: client1_user_5 → actual user_id would be user_5
+  let sample_username = username_prefix <> "_user_5"
+  
+  // Get user details by username
+  let user_result =
+    actor.call(
+      user_registry,
+      waiting: 5000,
+      sending: protocol.GetUserByUsername(sample_username, _),
+    )
+  
+  case user_result {
+    types.UserSuccess(user) -> {
+      io.println("📱 Feed for: @" <> user.username)
+      io.println("👤 Karma: " <> int.to_string(user.karma))
+      io.println("📚 Subscribed to " <> int.to_string(list.length(user.joined_subreddits)) <> " subreddit(s)")
+      io.println("")
+      
+      // Get their feed using the actual user ID
+      let feed =
+        actor.call(
+          feed_generator,
+          waiting: 5000,
+          sending: protocol.GetFeed(user.id, 10, _),
+        )
+      
+      case list.is_empty(feed) {
+        True -> {
+          io.println("  No posts in feed yet (user hasn't joined any subreddits)")
+        }
+        False -> {
+          io.println("🔥 Top " <> int.to_string(list.length(feed)) <> " Posts in Feed:")
+          io.println("─────────────────────────────────────────────────────────────")
+          
+          list.index_map(feed, fn(feed_post, idx) {
+            let score_indicator = case feed_post.score {
+              s if s > 10 -> "🔥 "
+              s if s > 5 -> "⬆️ "
+              s if s > 0 -> "👍 "
+              s if s == 0 -> "➖ "
+              _ -> "👎 "
+            }
+            
+            let repost_indicator = case feed_post.post.is_repost {
+              True -> " [REPOST]"
+              False -> ""
+            }
+            
+            io.println("")
+            io.println(
+              int.to_string(idx + 1)
+              <> ". "
+              <> score_indicator
+              <> feed_post.post.title
+              <> repost_indicator,
+            )
+            io.println(
+              "   r/"
+              <> feed_post.subreddit_name
+              <> " • by u/"
+              <> feed_post.author_username
+              <> " • Score: "
+              <> int.to_string(feed_post.score)
+              <> " (↑"
+              <> int.to_string(feed_post.post.upvotes)
+              <> " ↓"
+              <> int.to_string(feed_post.post.downvotes)
+              <> ")",
+            )
+          })
+          
+          io.println("")
+          io.println("─────────────────────────────────────────────────────────────")
+          io.println("✅ Feed generation working! Posts sorted by score and recency.")
+        }
+      }
+    }
+    _ -> {
+      io.println("  Could not load sample user feed")
+    }
+  }
+  
+  io.println("")
 }
 
 
