@@ -6,6 +6,7 @@ import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject, send}
 import gleam/int
 import gleam/list
+import gleam/option
 import gleam/otp/actor
 import gleam/result
 import gleam/string
@@ -50,6 +51,12 @@ fn handle_message(
       actor.continue(new_state)
     }
 
+    protocol.CreateRepost(original_post_id, author_id, subreddit_id, reply) -> {
+      let #(result, new_state) = create_repost(state, original_post_id, author_id, subreddit_id)
+      send(reply, result)
+      actor.continue(new_state)
+    }
+
     protocol.GetPost(post_id, reply) -> {
       let result = get_post(state, post_id)
       send(reply, result)
@@ -58,6 +65,12 @@ fn handle_message(
 
     protocol.GetPostsBySubreddit(subreddit_id, reply) -> {
       let posts = get_posts_by_subreddit(state, subreddit_id)
+      send(reply, posts)
+      actor.continue(state)
+    }
+
+    protocol.GetAllPosts(reply) -> {
+      let posts = get_all_posts(state)
       send(reply, posts)
       actor.continue(state)
     }
@@ -93,6 +106,8 @@ fn create_post(
           upvotes: 0,
           downvotes: 0,
           created_at: timestamp,
+          is_repost: False,
+          original_post_id: option.None,
         )
 
       // Update posts dict
@@ -137,6 +152,64 @@ fn get_posts_by_subreddit(state: State, subreddit_id: SubredditId) -> List(Post)
   list.filter_map(post_ids, fn(post_id) {
     dict.get(state.posts, post_id)
   })
+}
+
+fn get_all_posts(state: State) -> List(Post) {
+  dict.values(state.posts)
+}
+
+fn create_repost(
+  state: State,
+  original_post_id: PostId,
+  author_id: UserId,
+  subreddit_id: SubredditId,
+) -> #(PostResult, State) {
+  // Get the original post
+  case dict.get(state.posts, original_post_id) {
+    Error(_) -> #(PostError("Original post not found"), state)
+    Ok(original_post) -> {
+      // Create repost
+      let post_id = "post_" <> int.to_string(state.next_id)
+      let timestamp = get_timestamp()
+      let repost =
+        PostType(
+          id: post_id,
+          subreddit_id: subreddit_id,
+          author_id: author_id,
+          title: original_post.title,
+          content: original_post.content,
+          upvotes: 0,
+          downvotes: 0,
+          created_at: timestamp,
+          is_repost: True,
+          original_post_id: option.Some(original_post_id),
+        )
+
+      // Update posts dict
+      let new_posts = dict.insert(state.posts, post_id, repost)
+
+      // Update posts_by_subreddit
+      let existing_posts =
+        dict.get(state.posts_by_subreddit, subreddit_id)
+        |> result.unwrap([])
+      let updated_subreddit_posts = [post_id, ..existing_posts]
+      let new_posts_by_subreddit =
+        dict.insert(state.posts_by_subreddit, subreddit_id, updated_subreddit_posts)
+
+      // Initialize empty votes dict for this repost
+      let new_post_votes = dict.insert(state.post_votes, post_id, dict.new())
+
+      let new_state =
+        State(
+          posts: new_posts,
+          posts_by_subreddit: new_posts_by_subreddit,
+          post_votes: new_post_votes,
+          next_id: state.next_id + 1,
+        )
+
+      #(PostSuccess(repost), new_state)
+    }
+  }
 }
 
 fn vote_post(

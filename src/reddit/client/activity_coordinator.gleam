@@ -18,6 +18,7 @@ pub type ActivityConfig {
     comment_probability: Float,
     vote_probability: Float,
     dm_probability: Float,
+    repost_probability: Float,
   )
 }
 
@@ -43,6 +44,7 @@ pub type ActivityType {
   CastVote
   SendDirectMessage
   JoinSubreddit
+  CreateRepost
 }
 
 pub type ActivityStats {
@@ -56,10 +58,11 @@ pub fn default_config() -> ActivityConfig {
   ActivityConfig(
     num_subreddits: 20,
     zipf_exponent: 1.0,
-    post_probability: 0.3,
-    comment_probability: 0.3,
-    vote_probability: 0.3,
+    post_probability: 0.25,
+    comment_probability: 0.25,
+    vote_probability: 0.25,
     dm_probability: 0.1,
+    repost_probability: 0.15,
   )
 }
 
@@ -144,16 +147,21 @@ fn select_activity_type(config: ActivityConfig) -> ActivityType {
     +. config.comment_probability
     +. config.vote_probability
     +. config.dm_probability
+    +. config.repost_probability
   
   let post_threshold = config.post_probability /. total
   let comment_threshold = post_threshold +. config.comment_probability /. total
   let vote_threshold = comment_threshold +. config.vote_probability /. total
+  let dm_threshold = vote_threshold +. config.dm_probability /. total
+  let repost_threshold = dm_threshold +. config.repost_probability /. total
   
   case random {
     r if r <. post_threshold -> CreatePost
     r if r <. comment_threshold -> CreateComment
     r if r <. vote_threshold -> CastVote
-    _ -> SendDirectMessage
+    r if r <. dm_threshold -> SendDirectMessage
+    r if r <. repost_threshold -> CreateRepost
+    _ -> JoinSubreddit
   }
 }
 

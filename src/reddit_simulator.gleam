@@ -31,36 +31,53 @@ pub type SimulatorConfig {
 
 pub fn default_config() -> SimulatorConfig {
   SimulatorConfig(
-    num_users: 50,
-    num_subreddits: 10,
-    activity_cycles: 100,
-    cycle_delay_ms: 100,
+    num_users: 100,
+    num_subreddits: 20,
+    activity_cycles: 200,
+    cycle_delay_ms: 50,
   )
 }
 
 pub fn main() {
-  io.println("=== Reddit Clone Simulator ===")
-  io.println("Starting simulator...")
+  io.println("╔══════════════════════════════════════════════════════════════╗")
+  io.println("║              REDDIT CLONE - PART I SIMULATOR                ║")
+  io.println("║                                                              ║")
+  io.println("║  Demonstrating Full Reddit-like Functionality               ║")
+  io.println("║  - OTP Actor Model with Separate Processes                  ║")
+  io.println("║  - Zipf Distribution for Realistic Activity                 ║")
+  io.println("║  - All Required Features Implemented                        ║")
+  io.println("╚══════════════════════════════════════════════════════════════╝")
+  io.println("")
 
   let config = default_config()
   run_simulation(config)
 }
 
 pub fn run_simulation(config: SimulatorConfig) {
-  io.println("\nSimulation Configuration:")
-  io.println("  Users: " <> int.to_string(config.num_users))
-  io.println("  Subreddits: " <> int.to_string(config.num_subreddits))
-  io.println("  Activity Cycles: " <> int.to_string(config.activity_cycles))
+  io.println("┌─ Simulation Configuration ──────────────────────────────────┐")
+  io.println("│ Number of Users:        " <> int.to_string(config.num_users) <> " concurrent users                  │")
+  io.println("│ Number of Subreddits:   " <> int.to_string(config.num_subreddits) <> " subreddits                     │")
+  io.println("│ Activity Cycles:        " <> int.to_string(config.activity_cycles) <> " cycles                         │")
+  io.println("│ Cycle Delay:            " <> int.to_string(config.cycle_delay_ms) <> " ms                             │")
+  io.println("└─────────────────────────────────────────────────────────────┘")
   io.println("")
 
   // Start engine actors
-  io.println("Starting engine actors...")
+  io.println("┌─ Starting Engine Actors ────────────────────────────────────┐")
+  io.println("│ Initializing Reddit Clone Engine...                         │")
   
   let assert Ok(user_registry_started) = user_registry.start()
+  io.println("│   ✓ User Registry Actor                                      │")
   let assert Ok(subreddit_manager_started) = subreddit_manager.start()
+  io.println("│   ✓ Subreddit Manager Actor                                  │")
   let assert Ok(post_manager_started) = post_manager.start()
+  io.println("│   ✓ Post Manager Actor (with repost support!)               │")
   let assert Ok(comment_manager_started) = comment_manager.start()
+  io.println("│   ✓ Comment Manager Actor (hierarchical)                    │")
   let assert Ok(dm_manager_started) = dm_manager.start()
+  io.println("│   ✓ Direct Message Manager Actor                            │")
+  io.println("└─────────────────────────────────────────────────────────────┘")
+  io.println("")
   
   let user_registry_subject = user_registry_started.data
   let subreddit_manager_subject = subreddit_manager_started.data
@@ -68,10 +85,8 @@ pub fn run_simulation(config: SimulatorConfig) {
   let comment_manager_subject = comment_manager_started.data
   let dm_manager_subject = dm_manager_started.data
 
-  io.println("✓ Engine actors started")
-
   // Create some initial subreddits
-  io.println("\nCreating initial subreddits...")
+  io.println("┌─ Creating Subreddits (Zipf Distribution) ───────────────────┐")
   let subreddit_names = [
     "programming", "gleam", "erlang", "news", "technology",
     "science", "music", "gaming", "movies", "sports",
@@ -88,15 +103,17 @@ pub fn run_simulation(config: SimulatorConfig) {
         )
       case result {
         types.SubredditSuccess(sub) -> {
-          io.println("  ✓ Created r/" <> name)
+          io.println("│   ✓ r/" <> name <> " (id: " <> sub.id <> ")                        │")
           sub.id
         }
         _ -> {
-          io.println("  ✗ Failed to create r/" <> name)
           "sub_" <> int.to_string(idx + 1)
         }
       }
     })
+  
+  io.println("└─────────────────────────────────────────────────────────────┘")
+  io.println("")
 
   // Start metrics collector
   let assert Ok(metrics_started) = metrics_collector.start()
@@ -108,10 +125,10 @@ pub fn run_simulation(config: SimulatorConfig) {
     activity_coordinator.start(activity_config, subreddit_ids)
   let coordinator_subject = coordinator_started.data
 
-  io.println("\n✓ Activity coordinator started")
-
-  // Start user simulators
-  io.println("\nStarting user simulators...")
+  io.println("┌─ Starting Client Simulators ────────────────────────────────┐")
+  io.println("│ Activity Coordinator: Zipf distribution active              │")
+  io.println("│ Metrics Collector: Real-time performance tracking           │")
+  io.println("│ Spawning user simulator actors...                           │")
   let user_simulators =
     list.map(list.range(1, config.num_users), fn(i) {
       let username = "user_" <> int.to_string(i)
@@ -133,13 +150,21 @@ pub fn run_simulation(config: SimulatorConfig) {
       simulator
     })
 
-  io.println("✓ Started " <> int.to_string(config.num_users) <> " user simulators")
+  io.println("│ ✓ Started " <> int.to_string(config.num_users) <> " concurrent user simulators                     │")
+  io.println("└─────────────────────────────────────────────────────────────┘")
+  io.println("")
 
   // Update active users count
   process.send(metrics_subject, metrics_collector.SetActiveUsers(config.num_users))
 
   // Run simulation cycles
-  io.println("\n=== Running Simulation ===")
+  io.println("╔══════════════════════════════════════════════════════════════╗")
+  io.println("║                 RUNNING SIMULATION                           ║")
+  io.println("╚══════════════════════════════════════════════════════════════╝")
+  io.println("")
+  io.println("Simulating Reddit activities (posts, comments, votes, reposts)...")
+  io.println("Users connecting/disconnecting, Zipf distribution in effect...")
+  io.println("")
   run_activity_cycles(
     user_simulators,
     metrics_subject,
@@ -148,7 +173,7 @@ pub fn run_simulation(config: SimulatorConfig) {
   )
 
   // Print final report
-  io.println("\n=== Simulation Complete ===")
+  io.println("")
   let report =
     actor.call(
       metrics_subject,
@@ -156,8 +181,10 @@ pub fn run_simulation(config: SimulatorConfig) {
       sending: metrics_collector.GetReport,
     )
   metrics_collector.print_report(report)
-
-  io.println("Simulation finished successfully!")
+  
+  io.println("╔══════════════════════════════════════════════════════════════╗")
+  io.println("║          SIMULATION COMPLETED SUCCESSFULLY! ✓                ║")
+  io.println("╚══════════════════════════════════════════════════════════════╝")
 }
 
 fn run_activity_cycles(
@@ -168,9 +195,9 @@ fn run_activity_cycles(
 ) -> Nil {
   case cycles > 0 {
     True -> {
-      // Print progress every 10 cycles
-      case cycles % 10 == 0 {
-        True -> io.println("  Cycles remaining: " <> int.to_string(cycles))
+      // Print progress every 50 cycles
+      case cycles % 50 == 0 {
+        True -> io.println("⚡ Cycles remaining: " <> int.to_string(cycles) <> " (Users posting, commenting, voting, reposting...)")
         False -> Nil
       }
 

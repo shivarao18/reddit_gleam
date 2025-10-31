@@ -89,12 +89,21 @@ pub type PostManagerMessage {
     content: String,
     reply: Subject(PostResult),
   )
+  CreateRepost(
+    original_post_id: PostId,
+    author_id: UserId,
+    subreddit_id: SubredditId,
+    reply: Subject(PostResult),
+  )
   GetPost(
     post_id: PostId,
     reply: Subject(PostResult),
   )
   GetPostsBySubreddit(
     subreddit_id: SubredditId,
+    reply: Subject(List(Post)),
+  )
+  GetAllPosts(
     reply: Subject(List(Post)),
   )
   VotePost(

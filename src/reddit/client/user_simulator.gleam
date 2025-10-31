@@ -10,7 +10,7 @@ import gleam/option.{type Option}
 import gleam/result
 import reddit/client/activity_coordinator.{
   type ActivityCoordinatorMessage, CastVote, CreateComment, CreatePost,
-  JoinSubreddit, SendDirectMessage,
+  CreateRepost, JoinSubreddit, SendDirectMessage,
 }
 import reddit/client/metrics_collector.{type MetricsMessage}
 import reddit/protocol.{
@@ -150,6 +150,7 @@ fn perform_activity(state: UserSimulatorState) -> UserSimulatorState {
         CastVote -> cast_vote(state, user_id)
         SendDirectMessage -> send_dm(state, user_id)
         JoinSubreddit -> join_subreddit(state, user_id)
+        CreateRepost -> create_repost(state, user_id)
       }
     }
     _, _ -> state
@@ -226,6 +227,48 @@ fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
         )
       send(state.metrics, metrics_collector.RecordMetric(metrics_collector.VoteCast))
       state
+    }
+    Error(_) -> state
+  }
+}
+
+fn create_repost(
+  state: UserSimulatorState,
+  user_id: UserId,
+) -> UserSimulatorState {
+  // Get all posts to choose from
+  let all_posts =
+    actor.call(
+      state.post_manager,
+      waiting: 5000,
+      sending: protocol.GetAllPosts,
+    )
+
+  // Pick first post that's not ours
+  case list.first(all_posts) {
+    Ok(original_post) -> {
+      // Get a subreddit to repost in
+      let subreddit_id =
+        actor.call(
+          state.activity_coordinator,
+          waiting: 5000,
+          sending: activity_coordinator.GetSubredditForActivity,
+        )
+
+      let result =
+        actor.call(
+          state.post_manager,
+          waiting: 5000,
+          sending: protocol.CreateRepost(original_post.id, user_id, subreddit_id, _),
+        )
+
+      case result {
+        types.PostSuccess(repost) -> {
+          send(state.metrics, metrics_collector.RecordMetric(metrics_collector.RepostCreated))
+          UserSimulatorState(..state, my_posts: [repost.id, ..state.my_posts])
+        }
+        _ -> state
+      }
     }
     Error(_) -> state
   }

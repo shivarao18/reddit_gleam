@@ -2,6 +2,7 @@
 // Basic unit tests for core data types and the Zipf distribution.
 
 import gleeunit
+import gleam/option
 import reddit/types
 import reddit/client/zipf
 
@@ -47,6 +48,8 @@ pub fn post_type_test() {
     upvotes: 0,
     downvotes: 0,
     created_at: 0,
+    is_repost: False,
+    original_post_id: option.None,
   )
   
   assert post.title == "Test Post"

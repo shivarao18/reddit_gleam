@@ -57,6 +57,8 @@ pub type Post {
     upvotes: Int,
     downvotes: Int,
     created_at: Int,
+    is_repost: Bool,
+    original_post_id: Option(PostId),
   )
 }
 
