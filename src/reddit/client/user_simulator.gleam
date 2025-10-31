@@ -274,9 +274,42 @@ fn create_repost(
   }
 }
 
-fn send_dm(state: UserSimulatorState, _user_id: UserId) -> UserSimulatorState {
-  // For now, skip DM sending as we'd need another user
-  state
+fn send_dm(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
+  // Generate a random recipient user ID (simulate sending to another user)
+  // In a real implementation, we'd query for actual user IDs
+  // For simulation, we'll create a message to a simulated recipient
+  let recipient_id = "user_" <> int.to_string(get_random_user_id())
+  
+  // Don't send to ourselves
+  case recipient_id == user_id {
+    True -> state
+    False -> {
+      let content = "Direct message from " <> state.username
+      
+      let result =
+        actor.call(
+          state.dm_manager,
+          waiting: 5000,
+          sending: protocol.SendDirectMessage(user_id, recipient_id, content, option.None, _),
+        )
+      
+      case result {
+        types.DirectMessageSuccess(_dm) -> {
+          send(state.metrics, metrics_collector.RecordMetric(metrics_collector.DirectMessageSent))
+          state
+        }
+        _ -> state
+      }
+    }
+  }
+}
+
+// Generate a random user ID between 1 and 100
+@external(erlang, "rand", "uniform")
+fn erlang_uniform(n: Int) -> Int
+
+fn get_random_user_id() -> Int {
+  erlang_uniform(100)
 }
 
 fn join_subreddit(

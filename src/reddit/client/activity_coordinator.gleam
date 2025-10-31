@@ -19,6 +19,7 @@ pub type ActivityConfig {
     vote_probability: Float,
     dm_probability: Float,
     repost_probability: Float,
+    join_probability: Float,
   )
 }
 
@@ -58,12 +59,14 @@ pub fn default_config() -> ActivityConfig {
   ActivityConfig(
     num_subreddits: 20,
     zipf_exponent: 1.0,
-    post_probability: 0.25,
-    comment_probability: 0.25,
-    vote_probability: 0.25,
-    dm_probability: 0.1,
+    post_probability: 0.20,
+    comment_probability: 0.20,
+    vote_probability: 0.20,
+    dm_probability: 0.10,
     repost_probability: 0.15,
+    join_probability: 0.15,
   )
+  // Total: 1.0 (all activities explicitly weighted)
 }
 
 pub fn start(config: ActivityConfig, subreddits: List(SubredditId)) -> actor.StartResult(process.Subject(ActivityCoordinatorMessage)) {
@@ -141,19 +144,13 @@ fn select_subreddit(state: State) -> SubredditId {
 fn select_activity_type(config: ActivityConfig) -> ActivityType {
   let random = generate_random()
   
-  // Normalize probabilities
-  let total =
-    config.post_probability
-    +. config.comment_probability
-    +. config.vote_probability
-    +. config.dm_probability
-    +. config.repost_probability
-  
-  let post_threshold = config.post_probability /. total
-  let comment_threshold = post_threshold +. config.comment_probability /. total
-  let vote_threshold = comment_threshold +. config.vote_probability /. total
-  let dm_threshold = vote_threshold +. config.dm_probability /. total
-  let repost_threshold = dm_threshold +. config.repost_probability /. total
+  // Build cumulative thresholds (no normalization - all probabilities must sum to 1.0)
+  let post_threshold = config.post_probability
+  let comment_threshold = post_threshold +. config.comment_probability
+  let vote_threshold = comment_threshold +. config.vote_probability
+  let dm_threshold = vote_threshold +. config.dm_probability
+  let repost_threshold = dm_threshold +. config.repost_probability
+  let join_threshold = repost_threshold +. config.join_probability
   
   case random {
     r if r <. post_threshold -> CreatePost
@@ -161,7 +158,8 @@ fn select_activity_type(config: ActivityConfig) -> ActivityType {
     r if r <. vote_threshold -> CastVote
     r if r <. dm_threshold -> SendDirectMessage
     r if r <. repost_threshold -> CreateRepost
-    _ -> JoinSubreddit
+    r if r <. join_threshold -> JoinSubreddit
+    _ -> JoinSubreddit  // Fallback (should not reach if probabilities sum to 1.0)
   }
 }
 
