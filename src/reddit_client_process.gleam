@@ -1,21 +1,21 @@
-// Reddit Client Process - Independent client simulator
-// This is a SEPARATE PROCESS that connects to the engine
+// Reddit Client Process - Independent Distributed Client
+// This is a SEPARATE OS PROCESS that connects to the remote engine
 // Run multiple instances with: gleam run -m reddit_client_process
+// 
+// IMPORTANT: The engine MUST be running first!
+// Start engine: gleam run -m reddit_engine_standalone
 
 import gleam/erlang/process
 import gleam/int
 import gleam/io
 import gleam/list
 import gleam/otp/actor
+import gleam/string
 import reddit/client/activity_coordinator
 import reddit/client/metrics_collector
 import reddit/client/user_simulator
-import reddit/engine/comment_manager
-import reddit/engine/dm_manager
+import reddit/distributed/node_manager
 import reddit/engine/feed_generator
-import reddit/engine/post_manager
-import reddit/engine/subreddit_manager
-import reddit/engine/user_registry
 import reddit/protocol
 import reddit/types
 
@@ -52,40 +52,91 @@ pub fn main() {
 }
 
 pub fn run_client_process(config: ClientProcessConfig) {
+  io.println("╔═══════════════════════════════════════════════════════════╗")
   io.println(
-    "Client Process #"
+    "║   Reddit Client Process #"
     <> int.to_string(config.process_id)
-    <> " Configuration:",
+    <> "                                ║",
   )
+  io.println("╚═══════════════════════════════════════════════════════════╝")
+  io.println("")
+  io.println("Configuration:")
   io.println("  Users: " <> int.to_string(config.num_users))
   io.println("  Activity Cycles: " <> int.to_string(config.activity_cycles))
+  io.println("  Username Prefix: " <> config.username_prefix)
   io.println("")
   
-  // NOTE: In a real distributed setup, you would connect to remote engine actors
-  // For now, we'll start local actors but document the architecture
-  io.println("⚠ TODO: Connect to remote engine actors")
-  io.println("  For Part I, starting local engine actors as placeholder")
+  // Step 1: Initialize as distributed node
+  io.println("📡 Step 1: Initializing distributed node...")
+  let assert Ok(node_name) =
+    node_manager.init_node(node_manager.ClientNode(config.process_id))
+  io.println("   Client node: " <> node_name)
   io.println("")
   
-  // Start local engine actors (in production, these would be remote references)
-  let assert Ok(user_registry_started) = user_registry.start()
-  let assert Ok(subreddit_manager_started) = subreddit_manager.start()
-  let assert Ok(post_manager_started) = post_manager.start()
-  let assert Ok(comment_manager_started) = comment_manager.start()
-  let assert Ok(dm_manager_started) = dm_manager.start()
+  // Step 2: Check if engine is alive
+  io.println("🔍 Step 2: Checking if engine is available...")
+  case node_manager.is_engine_alive() {
+    False -> {
+      io.println("")
+      io.println("╔═══════════════════════════════════════════════════════════╗")
+      io.println("║   ❌ ERROR: ENGINE NOT FOUND!                             ║")
+      io.println("╚═══════════════════════════════════════════════════════════╝")
+      io.println("")
+      io.println("The engine process is not running or not reachable.")
+      io.println("")
+      io.println("Please start the engine first:")
+      io.println("  $ gleam run -m reddit_engine_standalone")
+      io.println("")
+      io.println("Then start this client process again.")
+      io.println("")
+      panic as "Engine not available - cannot start client"
+    }
+    True -> {
+      io.println("   ✓ Engine is alive and reachable!")
+      io.println("")
+    }
+  }
   
-  let user_registry_subject = user_registry_started.data
-  let subreddit_manager_subject = subreddit_manager_started.data
-  let post_manager_subject = post_manager_started.data
-  let comment_manager_subject = comment_manager_started.data
-  let dm_manager_subject = dm_manager_started.data
+  // Step 3: Connect to engine node
+  io.println("🌐 Step 3: Connecting to engine...")
+  let assert Ok(_) = node_manager.connect_to_engine()
+  let connected_nodes = node_manager.get_connected_nodes()
+  io.println("   Connected nodes: " <> string_join(connected_nodes, ", "))
+  io.println("")
   
-  // Start feed generator
-  let assert Ok(feed_generator_started) = feed_generator.start(
-    post_manager_subject,
-    subreddit_manager_subject,
-    user_registry_subject,
-  )
+  // Step 4: Get remote engine actor references
+  io.println("🔗 Step 4: Looking up remote engine actors...")
+  let assert Ok(user_registry_subject) =
+    node_manager.lookup_global_with_retry("user_registry", 5)
+  io.println("   ✓ Found user_registry")
+  
+  let assert Ok(subreddit_manager_subject) =
+    node_manager.lookup_global_with_retry("subreddit_manager", 5)
+  io.println("   ✓ Found subreddit_manager")
+  
+  let assert Ok(post_manager_subject) =
+    node_manager.lookup_global_with_retry("post_manager", 5)
+  io.println("   ✓ Found post_manager")
+  
+  let assert Ok(comment_manager_subject) =
+    node_manager.lookup_global_with_retry("comment_manager", 5)
+  io.println("   ✓ Found comment_manager")
+  
+  let assert Ok(dm_manager_subject) =
+    node_manager.lookup_global_with_retry("dm_manager", 5)
+  io.println("   ✓ Found dm_manager")
+  io.println("")
+  
+  io.println("✅ Successfully connected to all remote engine actors!")
+  io.println("")
+  
+  // Note: Feed generator needs to be local since it's client-specific
+  let assert Ok(feed_generator_started) =
+    feed_generator.start(
+      post_manager_subject,
+      subreddit_manager_subject,
+      user_registry_subject,
+    )
   let feed_generator_subject = feed_generator_started.data
   
   // Get or create subreddits
@@ -149,7 +200,9 @@ pub fn run_client_process(config: ClientProcessConfig) {
   )
   
   // Print final report
-  io.println("\n=== Client Process Complete ===")
+  io.println("\n" <> string.repeat("=", 60))
+  io.println("📊 Client #" <> int.to_string(config.process_id) <> " Final Report")
+  io.println(string.repeat("=", 60))
   let report =
     actor.call(
       metrics_subject,
@@ -157,15 +210,26 @@ pub fn run_client_process(config: ClientProcessConfig) {
       sending: metrics_collector.GetReport,
     )
   metrics_collector.print_report(report)
+  process.sleep(500)
   
-  // Display a sample user's feed to demonstrate feed functionality
+  // Display sample feed to PROVE data sharing across clients
+  io.println("")
+  io.println("🔍 Verifying Data Sharing Across Clients...")
+  io.println(
+    "   Fetching feed for user from THIS client (should see posts from OTHER clients too)",
+  )
+  io.println("")
   display_sample_feed(
-    user_registry_subject,
     feed_generator_subject,
+    user_registry_subject,
     config.username_prefix,
   )
   
-  io.println("Client process finished!")
+  io.println("")
+  io.println("╔═══════════════════════════════════════════════════════════╗")
+  io.println("║   ✅ Client #" <> int.to_string(config.process_id) <> " Finished Successfully!               ║")
+  io.println("╚═══════════════════════════════════════════════════════════╝")
+  io.println("")
 }
 
 fn get_or_create_subreddits(
@@ -226,9 +290,18 @@ fn run_activity_cycles(
   }
 }
 
+// Helper to join strings
+fn string_join(strings: List(String), separator: String) -> String {
+  case strings {
+    [] -> ""
+    [single] -> single
+    [first, ..rest] -> first <> separator <> string_join(rest, separator)
+  }
+}
+
 fn display_sample_feed(
-  user_registry: process.Subject(protocol.UserRegistryMessage),
   feed_generator: process.Subject(protocol.FeedGeneratorMessage),
+  user_registry: process.Subject(protocol.UserRegistryMessage),
   username_prefix: String,
 ) -> Nil {
   io.println("")
