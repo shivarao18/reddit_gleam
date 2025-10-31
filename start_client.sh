@@ -8,6 +8,13 @@ echo ""
 # Build first
 gleam build
 
-# Run the client
-gleam run -m reddit_client_process
+# Generate random client ID
+CLIENT_ID=${1:-$RANDOM}
+
+# Run the client with Erlang distributed mode
+erl -name client${CLIENT_ID}@127.0.0.1 \
+    -setcookie reddit_distributed_secret_2024 \
+    -pa build/dev/erlang/*/ebin \
+    -eval "reddit_client_process:main()." \
+    -noshell
 

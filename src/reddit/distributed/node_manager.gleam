@@ -24,31 +24,44 @@ const cookie = "reddit_distributed_secret_2024"
 
 /// Initialize this node for distributed communication
 pub fn init_node(node_type: NodeType) -> Result(String, ConnectionError) {
-  // Set cookie first
-  let _cookie_set = erlang_ffi.set_cookie(cookie)
+  // Check if node is already started (via erl -name flag)
+  let current = erlang_ffi.get_current_node_name()
   
-  // Start node with appropriate name
-  let node_name = case node_type {
-    EngineNode -> "engine"
-    ClientNode(id) -> "client" <> int.to_string(id)
-  }
-  
-  case erlang_ffi.start_node(node_name, "shortnames") {
-    Ok(_pid) -> {
-      let full_name = erlang_ffi.get_current_node_name()
-      io.println("✓ Started distributed node: " <> full_name)
-      Ok(full_name)
+  case current {
+    // Already distributed (started with erl -name)
+    name if name != "nonode@nohost" -> {
+      io.println("✓ Using existing distributed node: " <> name)
+      Ok(name)
     }
-    Error(reason) -> {
-      io.println("❌ Failed to start node: " <> reason)
-      Error(NodeStartFailed(reason))
+    // Not distributed, need to start
+    _ -> {
+      let node_name = case node_type {
+        EngineNode -> "engine"
+        ClientNode(id) -> "client" <> int.to_string(id)
+      }
+      
+      case erlang_ffi.start_node(node_name, "shortnames") {
+        Ok(_pid) -> {
+          // Set cookie AFTER node is started
+          let _cookie_set = erlang_ffi.set_cookie(cookie)
+          
+          let full_name = erlang_ffi.get_current_node_name()
+          io.println("✓ Started distributed node: " <> full_name)
+          Ok(full_name)
+        }
+        Error(reason) -> {
+          io.println("❌ Failed to start node: " <> reason)
+          Error(NodeStartFailed(reason))
+        }
+      }
     }
   }
 }
 
 /// Connect to the engine node
 pub fn connect_to_engine() -> Result(Nil, ConnectionError) {
-  let engine_node = "engine@" <> get_hostname()
+  // Use 127.0.0.1 to match the erl -name flags
+  let engine_node = "engine@127.0.0.1"
   
   io.println("Connecting to engine node: " <> engine_node)
   
@@ -66,7 +79,8 @@ pub fn connect_to_engine() -> Result(Nil, ConnectionError) {
 
 /// Check if engine node is reachable
 pub fn is_engine_alive() -> Bool {
-  let engine_node = "engine@" <> get_hostname()
+  // Use 127.0.0.1 to match the erl -name flags
+  let engine_node = "engine@127.0.0.1"
   
   case erlang_ffi.connect_to_node(engine_node) {
     Ok(_) -> True

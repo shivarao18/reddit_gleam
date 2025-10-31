@@ -13,8 +13,8 @@ import gleam/erlang/process.{type Pid, type Subject}
 pub fn start_node_ffi(name_list: List(Atom)) -> Result(Pid, Atom)
 
 pub fn start_node(name: String, node_type: String) -> Result(Pid, String) {
-  let name_atom = unsafe_string_to_atom(name)
-  let type_atom = unsafe_string_to_atom(node_type)
+  let name_atom = atom.create(name)
+  let type_atom = atom.create(node_type)
   
   case start_node_ffi([name_atom, type_atom]) {
     Ok(pid) -> Ok(pid)
@@ -22,16 +22,13 @@ pub fn start_node(name: String, node_type: String) -> Result(Pid, String) {
   }
 }
 
-@external(erlang, "erlang", "binary_to_atom")
-fn unsafe_string_to_atom(s: String) -> Atom
-
 /// Set the Erlang cookie for authentication
 @external(erlang, "erlang", "set_cookie")
 pub fn set_cookie_ffi(node: Atom, cookie: Atom) -> Bool
 
 pub fn set_cookie(cookie: String) -> Bool {
-  let cookie_atom = unsafe_string_to_atom(cookie)
-  set_cookie_ffi(unsafe_string_to_atom(""), cookie_atom)
+  let cookie_atom = atom.create(cookie)
+  set_cookie_ffi(atom.create(""), cookie_atom)
 }
 
 /// Get current node name
@@ -49,7 +46,7 @@ pub fn get_current_node_name() -> String {
 pub fn ping_node_ffi(node: Atom) -> Atom
 
 pub fn connect_to_node(node_name: String) -> Result(Nil, String) {
-  let node_atom = unsafe_string_to_atom(node_name)
+  let node_atom = atom.create(node_name)
   let result = ping_node_ffi(node_atom)
   
   case atom.to_string(result) {
@@ -74,7 +71,7 @@ pub fn get_connected_nodes() -> List(String) {
 pub fn register_global_ffi(name: Atom, pid: Pid) -> Atom
 
 pub fn register_global_pid(name: String, pid: Pid) -> Result(Nil, String) {
-  let name_atom = unsafe_string_to_atom(name)
+  let name_atom = atom.create(name)
   let result = register_global_ffi(name_atom, pid)
   
   case atom.to_string(result) {
@@ -89,7 +86,7 @@ pub fn register_global_pid(name: String, pid: Pid) -> Result(Nil, String) {
 pub fn whereis_global_ffi(name: Atom) -> Dynamic
 
 pub fn whereis_global(name: String) -> Result(Pid, String) {
-  let name_atom = unsafe_string_to_atom(name)
+  let name_atom = atom.create(name)
   let result = whereis_global_ffi(name_atom)
   
   case dynamic.classify(result) {
@@ -99,7 +96,7 @@ pub fn whereis_global(name: String) -> Result(Pid, String) {
   }
 }
 
-@external(erlang, "erlang", "list_to_pid")
+@external(erlang, "erlang", "binary_to_term")
 fn unsafe_dynamic_to_pid(dynamic: Dynamic) -> Pid
 
 /// Unregister a globally registered process
@@ -107,14 +104,20 @@ fn unsafe_dynamic_to_pid(dynamic: Dynamic) -> Pid
 pub fn unregister_global_ffi(name: Atom) -> Atom
 
 pub fn unregister_global(name: String) -> Nil {
-  let name_atom = unsafe_string_to_atom(name)
+  let name_atom = atom.create(name)
   let _result = unregister_global_ffi(name_atom)
   Nil
 }
 
 // Helper to convert Subject to Pid (for registration)
-@external(erlang, "gleam_erlang_ffi", "subject_owner")
-pub fn subject_to_pid(subject: Subject(a)) -> Pid
+// A Subject is a record {gleam_erlang_subject, Pid}
+@external(erlang, "erlang", "element")
+fn erlang_element(n: Int, tuple: a) -> b
+
+pub fn subject_to_pid(subject: Subject(a)) -> Pid {
+  // Extract Pid from Subject tuple (element 2 of the tuple)
+  erlang_element(2, subject)
+}
 
 // Helper functions
 
