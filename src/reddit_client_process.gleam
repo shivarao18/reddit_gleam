@@ -245,14 +245,17 @@ fn get_or_create_subreddits(
   list.index_map(list.take(subreddit_names, num), fn(name, idx) {
     let creator_id = "system"
     // Use distributed_call for remote actors
+    // Pass a function that creates the message with the reply Subject
     let result_dynamic = node_manager.distributed_call(
       subreddit_manager,
-      protocol.CreateSubreddit(
-        name,
-        "Subreddit about " <> name,
-        creator_id,
-        process.new_subject(),
-      ),
+      fn(reply) {
+        protocol.CreateSubreddit(
+          name,
+          "Subreddit about " <> name,
+          creator_id,
+          reply,
+        )
+      },
       5000,
     )
     // Convert the dynamic result to the expected type
@@ -317,13 +320,14 @@ fn display_sample_feed(
   // Format: client1_user_5 → actual user_id would be user_5
   let sample_username = username_prefix <> "_user_5"
   
-  // Get user details by username
-  let user_result =
-    actor.call(
+  // Get user details by username (using distributed call)
+  let user_result_dynamic =
+    node_manager.distributed_call(
       user_registry,
-      waiting: 5000,
-      sending: protocol.GetUserByUsername(sample_username, _),
+      fn(reply) { protocol.GetUserByUsername(sample_username, reply) },
+      5000,
     )
+  let user_result: types.UserResult = node_manager.dynamic_to_any(user_result_dynamic)
   
   case user_result {
     types.UserSuccess(user) -> {

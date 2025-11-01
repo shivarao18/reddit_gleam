@@ -6,7 +6,6 @@ import gleam/erlang/atom
 import gleam/erlang/process.{type Pid, type Subject}
 import gleam/int
 import gleam/io
-import gleam/result
 import reddit/distributed/erlang_ffi
 
 pub type NodeType {
@@ -61,8 +60,7 @@ pub fn init_node(node_type: NodeType) -> Result(String, ConnectionError) {
 
 /// Connect to the engine node
 pub fn connect_to_engine() -> Result(Nil, ConnectionError) {
-  // Use 127.0.0.1 to match the erl -name flags
-  let engine_node = "engine@127.0.0.1"
+  let engine_node = "engine@" <> get_hostname()
 
   io.println("Connecting to engine node: " <> engine_node)
 
@@ -80,8 +78,7 @@ pub fn connect_to_engine() -> Result(Nil, ConnectionError) {
 
 /// Check if engine node is reachable
 pub fn is_engine_alive() -> Bool {
-  // Use 127.0.0.1 to match the erl -name flags
-  let engine_node = "engine@127.0.0.1"
+  let engine_node = "engine@" <> get_hostname()
 
   case erlang_ffi.connect_to_node(engine_node) {
     Ok(_) -> True
@@ -173,23 +170,19 @@ fn pid_to_subject(pid: Pid) -> Subject(a) {
 @external(erlang, "reddit_distributed_ffi", "pid_to_subject")
 fn unsafe_pid_to_subject(pid: Pid) -> Subject(a)
 
-// Helper: Get hostname
-@external(erlang, "inet", "gethostname")
-fn get_hostname_tuple() -> #(atom.Atom, String)
-
-fn get_hostname() -> String {
-  let #(_ok, hostname) = get_hostname_tuple()
-  hostname
-}
+// Helper: Get hostname as a proper Gleam String (binary)
+@external(erlang, "reddit_distributed_ffi", "get_hostname_as_binary")
+fn get_hostname() -> String
 
 /// Make a distributed call to a remote actor
 /// This works across nodes, unlike actor.call()
+/// message_builder is a function that creates the message with a reply Subject
 pub fn distributed_call(
   subject: Subject(msg),
-  message: msg,
+  message_builder: fn(Subject(reply)) -> msg,
   timeout_ms: Int,
 ) -> Dynamic {
-  erlang_ffi.distributed_call(subject, message, timeout_ms)
+  erlang_ffi.distributed_call(subject, message_builder, timeout_ms)
 }
 
 /// Convert a Dynamic result to the expected type

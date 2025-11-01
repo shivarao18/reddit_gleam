@@ -12,7 +12,7 @@ gleam build
 erlc -o build/dev/erlang/reddit/ebin priv/reddit_distributed_ffi.erl
 
 # Run the engine with Erlang distributed mode
-erl -name engine@127.0.0.1 \
+erl -sname engine \
     -setcookie reddit_distributed_secret_2024 \
     -pa build/dev/erlang/*/ebin \
     -eval "reddit_engine_standalone:main()." \

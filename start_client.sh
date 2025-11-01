@@ -15,7 +15,7 @@ erlc -o build/dev/erlang/reddit/ebin priv/reddit_distributed_ffi.erl
 CLIENT_ID=${1:-$RANDOM}
 
 # Run the client with Erlang distributed mode
-erl -name client${CLIENT_ID}@127.0.0.1 \
+erl -sname client${CLIENT_ID} \
     -setcookie reddit_distributed_secret_2024 \
     -pa build/dev/erlang/*/ebin \
     -eval "reddit_client_process:main()." \

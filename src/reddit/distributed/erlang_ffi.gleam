@@ -41,13 +41,12 @@ pub fn get_current_node_name() -> String {
 
 // Node connectivity
 
-/// Connect to another node (ping it)
-@external(erlang, "net_adm", "ping")
-pub fn ping_node_ffi(node: Atom) -> Atom
+/// Ping a node by string name (uses Erlang helper that handles conversion safely)
+@external(erlang, "reddit_distributed_ffi", "ping_node_by_string")
+fn ping_node_by_string_ffi(node_name: String) -> Atom
 
 pub fn connect_to_node(node_name: String) -> Result(Nil, String) {
-  let node_atom = atom.create(node_name)
-  let result = ping_node_ffi(node_atom)
+  let result = ping_node_by_string_ffi(node_name)
   
   case atom.to_string(result) {
     "pong" -> Ok(Nil)
@@ -134,11 +133,12 @@ fn list_atoms_to_strings(atoms: List(Atom)) -> List(String) {
 
 /// Distributed call - works across nodes
 /// This bypasses Gleam's actor.call() which doesn't work for remote actors
+/// message_builder is a function that takes a reply Subject and returns the full message
 /// Returns a Dynamic that needs to be decoded
 @external(erlang, "reddit_distributed_ffi", "distributed_call")
 pub fn distributed_call(
   subject: Subject(msg),
-  message: msg,
+  message_builder: fn(Subject(reply)) -> msg,
   timeout: Int,
 ) -> Dynamic
 
