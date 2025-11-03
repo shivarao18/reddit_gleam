@@ -192,31 +192,7 @@ fn create_comment(
   state: UserSimulatorState,
   user_id: UserId,
 ) -> UserSimulatorState {
-  // Try to comment on one of our posts or a random post
-  case list.first(state.my_posts) {
-    Ok(post_id) -> {
-      let content = "Comment by " <> state.username
-      let result =
-        actor.call(
-          state.comment_manager,
-          waiting: 5000,
-          sending: protocol.CreateComment(post_id, user_id, content, option.None, _),
-        )
-
-      case result {
-        types.CommentSuccess(comment) -> {
-          send(state.metrics, metrics_collector.RecordMetric(metrics_collector.CommentCreated))
-          UserSimulatorState(..state, my_comments: [comment.id, ..state.my_comments])
-        }
-        _ -> state
-      }
-    }
-    Error(_) -> state
-  }
-}
-
-fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
-  // Get all posts to vote on (not just our own!)
+  // Get all posts to potentially comment on
   let all_posts =
     actor.call(
       state.post_manager,
@@ -224,29 +200,153 @@ fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
       sending: protocol.GetAllPosts,
     )
   
-  // Pick a random post
   case list.length(all_posts) {
     0 -> state
     len -> {
+      // Pick a random post to comment on
       let random_index = erlang_uniform(len) - 1
       case list.drop(all_posts, random_index) |> list.first() {
         Ok(post) -> {
-          // Randomly choose upvote or downvote (70% upvote, 30% downvote for realistic Reddit)
-          let vote_type = case erlang_uniform(10) {
-            n if n <= 7 -> types.Upvote
-            _ -> types.Downvote
+          // 40% chance to reply to an existing comment (nested), 60% chance to comment on post
+          let should_nest = erlang_uniform(10) <= 4
+          
+          let parent_comment_id = case should_nest {
+            True -> {
+              // Try to get comments on this post to reply to
+              let post_comments =
+                actor.call(
+                  state.comment_manager,
+                  waiting: 5000,
+                  sending: protocol.GetCommentsByPost(post.id, _),
+                )
+              
+              case list.length(post_comments) {
+                0 -> option.None
+                comment_len -> {
+                  let comment_index = erlang_uniform(comment_len) - 1
+                  case list.drop(post_comments, comment_index) |> list.first() {
+                    Ok(parent_comment) -> option.Some(parent_comment.id)
+                    Error(_) -> option.None
+                  }
+                }
+              }
+            }
+            False -> option.None
           }
           
-          let _ =
+          let content = case parent_comment_id {
+            option.Some(_) -> "Reply by " <> state.username
+            option.None -> "Comment by " <> state.username
+          }
+          
+          let result =
             actor.call(
-              state.post_manager,
+              state.comment_manager,
               waiting: 5000,
-              sending: protocol.VotePost(post.id, user_id, vote_type, _),
+              sending: protocol.CreateComment(post.id, user_id, content, parent_comment_id, _),
             )
-          send(state.metrics, metrics_collector.RecordMetric(metrics_collector.VoteCast))
-          state
+
+          case result {
+            types.CommentSuccess(comment) -> {
+              send(state.metrics, metrics_collector.RecordMetric(metrics_collector.CommentCreated))
+              UserSimulatorState(..state, my_comments: [comment.id, ..state.my_comments])
+            }
+            _ -> state
+          }
         }
         Error(_) -> state
+      }
+    }
+  }
+}
+
+fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
+  // Randomly choose upvote or downvote (70% upvote, 30% downvote for realistic Reddit)
+  let vote_type = case erlang_uniform(10) {
+    n if n <= 7 -> types.Upvote
+    _ -> types.Downvote
+  }
+  
+  // 50% chance to vote on a post, 50% chance to vote on a comment
+  let vote_on_post = erlang_uniform(2) == 1
+  
+  case vote_on_post {
+    True -> {
+      // Vote on a post
+      let all_posts =
+        actor.call(
+          state.post_manager,
+          waiting: 5000,
+          sending: protocol.GetAllPosts,
+        )
+      
+      case list.length(all_posts) {
+        0 -> state
+        len -> {
+          let random_index = erlang_uniform(len) - 1
+          case list.drop(all_posts, random_index) |> list.first() {
+            Ok(post) -> {
+              let _ =
+                actor.call(
+                  state.post_manager,
+                  waiting: 5000,
+                  sending: protocol.VotePost(post.id, user_id, vote_type, _),
+                )
+              send(state.metrics, metrics_collector.RecordMetric(metrics_collector.VoteCast))
+              state
+            }
+            Error(_) -> state
+          }
+        }
+      }
+    }
+    False -> {
+      // Vote on a comment
+      // Get all posts to find their comments
+      let all_posts =
+        actor.call(
+          state.post_manager,
+          waiting: 5000,
+          sending: protocol.GetAllPosts,
+        )
+      
+      case list.length(all_posts) {
+        0 -> state
+        len -> {
+          let random_index = erlang_uniform(len) - 1
+          case list.drop(all_posts, random_index) |> list.first() {
+            Ok(post) -> {
+              // Get comments on this post
+              let post_comments =
+                actor.call(
+                  state.comment_manager,
+                  waiting: 5000,
+                  sending: protocol.GetCommentsByPost(post.id, _),
+                )
+              
+              case list.length(post_comments) {
+                0 -> state
+                comment_len -> {
+                  let comment_index = erlang_uniform(comment_len) - 1
+                  case list.drop(post_comments, comment_index) |> list.first() {
+                    Ok(comment) -> {
+                      let _ =
+                        actor.call(
+                          state.comment_manager,
+                          waiting: 5000,
+                          sending: protocol.VoteComment(comment.id, user_id, vote_type, _),
+                        )
+                      send(state.metrics, metrics_collector.RecordMetric(metrics_collector.VoteCast))
+                      state
+                    }
+                    Error(_) -> state
+                  }
+                }
+              }
+            }
+            Error(_) -> state
+          }
+        }
       }
     }
   }

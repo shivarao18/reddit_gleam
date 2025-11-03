@@ -10,7 +10,7 @@ import gleam/option.{type Option}
 import gleam/otp/actor
 import gleam/result
 import gleam/string
-import reddit/protocol.{type CommentManagerMessage}
+import reddit/protocol.{type CommentManagerMessage, type UserRegistryMessage}
 import reddit/types.{
   type Comment, type CommentId, type CommentResult, type PostId, type UserId,
   type VoteType, Comment as CommentType, CommentError, CommentNotFound,
@@ -23,6 +23,7 @@ pub type State {
     comments_by_post: Dict(PostId, List(CommentId)),
     comment_votes: Dict(CommentId, Dict(UserId, VoteType)),
     next_id: Int,
+    user_registry: option.Option(Subject(UserRegistryMessage)),
   )
 }
 
@@ -33,12 +34,20 @@ pub fn start() -> actor.StartResult(Subject(CommentManagerMessage)) {
       comments_by_post: dict.new(),
       comment_votes: dict.new(),
       next_id: 1,
+      user_registry: option.None,
     )
   
   let builder =
     actor.new(initial_state)
     |> actor.on_message(handle_message)
   actor.start(builder)
+}
+
+pub fn set_user_registry(
+  comment_manager: Subject(CommentManagerMessage),
+  user_registry: Subject(UserRegistryMessage),
+) -> Nil {
+  send(comment_manager, protocol.SetCommentManagerUserRegistry(user_registry))
 }
 
 fn handle_message(
@@ -67,6 +76,11 @@ fn handle_message(
     protocol.VoteComment(comment_id, user_id, vote_type, reply) -> {
       let #(result, new_state) = vote_comment(state, comment_id, user_id, vote_type)
       send(reply, result)
+      actor.continue(new_state)
+    }
+
+    protocol.SetCommentManagerUserRegistry(user_registry) -> {
+      let new_state = State(..state, user_registry: option.Some(user_registry))
       actor.continue(new_state)
     }
   }
@@ -130,6 +144,7 @@ fn create_comment(
               comments_by_post: new_comments_by_post,
               comment_votes: new_comment_votes,
               next_id: state.next_id + 1,
+              user_registry: state.user_registry,
             )
 
           #(CommentSuccess(new_comment), new_state)
@@ -194,6 +209,16 @@ fn vote_comment(
       // Update votes
       let new_votes = dict.insert(votes, user_id, vote_type)
       let new_comment_votes = dict.insert(state.comment_votes, comment_id, new_votes)
+
+      // Update comment author's karma
+      let karma_delta = upvote_delta - downvote_delta
+      case state.user_registry, karma_delta {
+        option.Some(user_reg), delta if delta != 0 -> {
+          // Send karma update (fire and forget)
+          send(user_reg, protocol.UpdateUserKarmaAsync(comment.author_id, delta))
+        }
+        _, _ -> Nil
+      }
 
       let new_state =
         State(

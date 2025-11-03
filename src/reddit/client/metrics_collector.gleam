@@ -22,18 +22,10 @@ pub type MetricType {
   RepostCreated
 }
 
-pub type OperationLatency {
-  OperationLatency(
-    operation: String,
-    duration_ms: Int,
-  )
-}
-
 pub type State {
   State(
     operation_counts: Dict(String, Int),
     total_operations: Int,
-    latencies: List(OperationLatency),
     start_time: Int,
     active_users: Int,
   )
@@ -41,7 +33,6 @@ pub type State {
 
 pub type MetricsMessage {
   RecordMetric(metric_type: MetricType)
-  RecordLatency(operation: String, duration_ms: Int)
   SetActiveUsers(count: Int)
   GetReport(Subject(MetricsReport))
   Reset
@@ -52,7 +43,6 @@ pub type MetricsReport {
     total_operations: Int,
     operation_counts: Dict(String, Int),
     operations_per_second: Float,
-    average_latency_ms: Float,
     active_users: Int,
     runtime_seconds: Int,
   )
@@ -64,7 +54,6 @@ pub fn start() -> actor.StartResult(Subject(MetricsMessage)) {
     State(
       operation_counts: dict.new(),
       total_operations: 0,
-      latencies: [],
       start_time: timestamp,
       active_users: 0,
     )
@@ -96,15 +85,6 @@ fn handle_message(
       actor.continue(new_state)
     }
 
-    RecordLatency(operation, duration_ms) -> {
-      let new_latency = OperationLatency(operation, duration_ms)
-      let new_latencies = [new_latency, ..state.latencies]
-      // Keep only last 1000 latencies to avoid unbounded growth
-      let trimmed_latencies = list.take(new_latencies, 1000)
-      let new_state = State(..state, latencies: trimmed_latencies)
-      actor.continue(new_state)
-    }
-
     SetActiveUsers(count) -> {
       let new_state = State(..state, active_users: count)
       actor.continue(new_state)
@@ -122,7 +102,6 @@ fn handle_message(
         State(
           operation_counts: dict.new(),
           total_operations: 0,
-          latencies: [],
           start_time: timestamp,
           active_users: state.active_users,
         )
@@ -140,20 +119,10 @@ fn generate_report(state: State) -> MetricsReport {
     False -> 0.0
   }
 
-  let average_latency = case list.length(state.latencies) {
-    0 -> 0.0
-    count -> {
-      let total_latency =
-        list.fold(state.latencies, 0, fn(acc, lat) { acc + lat.duration_ms })
-      int.to_float(total_latency) /. int.to_float(count)
-    }
-  }
-
   MetricsReport(
     total_operations: state.total_operations,
     operation_counts: state.operation_counts,
     operations_per_second: operations_per_second,
-    average_latency_ms: average_latency,
     active_users: state.active_users,
     runtime_seconds: runtime_seconds,
   )
@@ -171,7 +140,6 @@ pub fn print_report(report: MetricsReport) -> Nil {
   io.println("│ Active Users:       " <> pad_right(int.to_string(report.active_users) <> " concurrent users", 38) <> "│")
   io.println("│ Total Operations:   " <> pad_right(int.to_string(report.total_operations), 38) <> "│")
   io.println("│ Throughput:         " <> pad_right(float.to_string(report.operations_per_second) <> " ops/sec", 38) <> "│")
-  io.println("│ Avg Latency:        " <> pad_right(float.to_string(report.average_latency_ms) <> " ms", 38) <> "│")
   io.println("└─────────────────────────────────────────────────────────────┘")
   io.println("")
   io.println("┌─ Feature Implementation Status ─────────────────────────────┐")

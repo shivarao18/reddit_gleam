@@ -58,17 +58,33 @@ pub fn main() {
 
 pub fn run_simulation(config: SimulatorConfig) {
   io.println("┌─ Simulation Configuration ──────────────────────────────────┐")
-  io.println("│ Number of Users:        " <> int.to_string(config.num_users) <> " concurrent users                  │")
-  io.println("│ Number of Subreddits:   " <> int.to_string(config.num_subreddits) <> " subreddits                     │")
-  io.println("│ Activity Cycles:        " <> int.to_string(config.activity_cycles) <> " cycles                         │")
-  io.println("│ Cycle Delay:            " <> int.to_string(config.cycle_delay_ms) <> " ms                             │")
+  io.println(
+    "│ Number of Users:        "
+    <> int.to_string(config.num_users)
+    <> " concurrent users                  │",
+  )
+  io.println(
+    "│ Number of Subreddits:   "
+    <> int.to_string(config.num_subreddits)
+    <> " subreddits                     │",
+  )
+  io.println(
+    "│ Activity Cycles:        "
+    <> int.to_string(config.activity_cycles)
+    <> " cycles                         │",
+  )
+  io.println(
+    "│ Cycle Delay:            "
+    <> int.to_string(config.cycle_delay_ms)
+    <> " ms                             │",
+  )
   io.println("└─────────────────────────────────────────────────────────────┘")
   io.println("")
 
   // Start engine actors
   io.println("┌─ Starting Engine Actors ────────────────────────────────────┐")
   io.println("│ Initializing Reddit Clone Engine...                         │")
-  
+
   let assert Ok(user_registry_started) = user_registry.start()
   io.println("│   ✓ User Registry Actor                                      │")
   let assert Ok(subreddit_manager_started) = subreddit_manager.start()
@@ -79,58 +95,80 @@ pub fn run_simulation(config: SimulatorConfig) {
   io.println("│   ✓ Comment Manager Actor (hierarchical)                    │")
   let assert Ok(dm_manager_started) = dm_manager.start()
   io.println("│   ✓ Direct Message Manager Actor                            │")
-  
+
   let user_registry_subject = user_registry_started.data
   let subreddit_manager_subject = subreddit_manager_started.data
   let post_manager_subject = post_manager_started.data
   let comment_manager_subject = comment_manager_started.data
   let dm_manager_subject = dm_manager_started.data
-  
-  let assert Ok(feed_generator_started) = feed_generator.start(
-    post_manager_subject,
-    subreddit_manager_subject,
+
+  // Wire up user_registry to post and comment managers for karma updates
+  post_manager.set_user_registry(post_manager_subject, user_registry_subject)
+  comment_manager.set_user_registry(
+    comment_manager_subject,
     user_registry_subject,
   )
+
+  let assert Ok(feed_generator_started) =
+    feed_generator.start(
+      post_manager_subject,
+      subreddit_manager_subject,
+      user_registry_subject,
+    )
   io.println("│   ✓ Feed Generator Actor (personalized feeds!)              │")
   io.println("└─────────────────────────────────────────────────────────────┘")
   io.println("")
-  
+
   let feed_generator_subject = feed_generator_started.data
 
   // Create some initial subreddits
   io.println("┌─ Creating Subreddits (Zipf Distribution) ───────────────────┐")
   let subreddit_names = [
-    "programming", "gleam", "erlang", "news", "technology",
-    "science", "music", "gaming", "movies", "sports",
+    "programming", "gleam", "erlang", "news", "technology", "science", "music",
+    "gaming", "movies", "sports",
   ]
 
   let subreddit_ids =
-    list.index_map(list.take(subreddit_names, config.num_subreddits), fn(name, idx) {
-      let creator_id = "system"
-      let result =
-        actor.call(
-          subreddit_manager_subject,
-          waiting: 5000,
-          sending: protocol.CreateSubreddit(name, "Subreddit about " <> name, creator_id, _),
-        )
-      case result {
-        types.SubredditSuccess(sub) -> {
-          io.println("│   ✓ r/" <> name <> " (id: " <> sub.id <> ")                        │")
-          sub.id
+    list.index_map(
+      list.take(subreddit_names, config.num_subreddits),
+      fn(name, idx) {
+        let creator_id = "system"
+        let result =
+          actor.call(
+            subreddit_manager_subject,
+            waiting: 5000,
+            sending: protocol.CreateSubreddit(
+              name,
+              "Subreddit about " <> name,
+              creator_id,
+              _,
+            ),
+          )
+        case result {
+          types.SubredditSuccess(sub) -> {
+            io.println(
+              "│   ✓ r/"
+              <> name
+              <> " (id: "
+              <> sub.id
+              <> ")                        │",
+            )
+            sub.id
+          }
+          _ -> {
+            "sub_" <> int.to_string(idx + 1)
+          }
         }
-        _ -> {
-          "sub_" <> int.to_string(idx + 1)
-        }
-      }
-    })
-  
+      },
+    )
+
   io.println("└─────────────────────────────────────────────────────────────┘")
   io.println("")
 
   // Start metrics collector
   let assert Ok(metrics_started) = metrics_collector.start()
   let metrics_subject = metrics_started.data
-  
+
   // Start activity coordinator
   let activity_config = activity_coordinator.default_config()
   let assert Ok(coordinator_started) =
@@ -156,25 +194,34 @@ pub fn run_simulation(config: SimulatorConfig) {
           metrics_subject,
         )
       let simulator = simulator_started.data
-      
+
       // Initialize the user
       process.send(simulator, user_simulator.Initialize)
       simulator
     })
 
-  io.println("│ ✓ Started " <> int.to_string(config.num_users) <> " concurrent user simulators                     │")
+  io.println(
+    "│ ✓ Started "
+    <> int.to_string(config.num_users)
+    <> " concurrent user simulators                     │",
+  )
   io.println("└─────────────────────────────────────────────────────────────┘")
   io.println("")
 
   // Update active users count
-  process.send(metrics_subject, metrics_collector.SetActiveUsers(config.num_users))
+  process.send(
+    metrics_subject,
+    metrics_collector.SetActiveUsers(config.num_users),
+  )
 
   // Run simulation cycles
   io.println("╔══════════════════════════════════════════════════════════════╗")
   io.println("║                 RUNNING SIMULATION                           ║")
   io.println("╚══════════════════════════════════════════════════════════════╝")
   io.println("")
-  io.println("Simulating Reddit activities (posts, comments, votes, reposts)...")
+  io.println(
+    "Simulating Reddit activities (posts, comments, votes, reposts)...",
+  )
   io.println("Users connecting/disconnecting, Zipf distribution in effect...")
   io.println("")
   run_activity_cycles(
@@ -192,7 +239,7 @@ pub fn run_simulation(config: SimulatorConfig) {
       sending: metrics_collector.GetReport,
     )
   metrics_collector.print_report(report)
-  
+
   // Display a sample user's feed to demonstrate feed functionality
   display_sample_feed(
     user_registry_subject,
@@ -200,7 +247,7 @@ pub fn run_simulation(config: SimulatorConfig) {
     comment_manager_subject,
     config.num_users,
   )
-  
+
   io.println("╔══════════════════════════════════════════════════════════════╗")
   io.println("║          SIMULATION COMPLETED SUCCESSFULLY! ✓                ║")
   io.println("╚══════════════════════════════════════════════════════════════╝")
@@ -215,7 +262,12 @@ fn run_activity_cycles(
     True -> {
       // Print progress every 50 cycles
       case cycles % 50 == 0 {
-        True -> io.println("⚡ Cycles remaining: " <> int.to_string(cycles) <> " (Users posting, commenting, voting, reposting...)")
+        True ->
+          io.println(
+            "⚡ Cycles remaining: "
+            <> int.to_string(cycles)
+            <> " (Users posting, commenting, voting, reposting...)",
+          )
         False -> Nil
       }
 
@@ -244,45 +296,58 @@ fn display_sample_feed(
   io.println("║            SAMPLE USER FEED (Feed Functionality)            ║")
   io.println("╚══════════════════════════════════════════════════════════════╝")
   io.println("")
-  
+
   // Pick a random user (user_5 for consistency, but could be any)
   let sample_user_id = "user_5"
-  
+
   // Get user details
   let user_result =
-    actor.call(
-      user_registry,
-      waiting: 5000,
-      sending: protocol.GetUser(sample_user_id, _),
-    )
-  
+    actor.call(user_registry, waiting: 5000, sending: protocol.GetUser(
+      sample_user_id,
+      _,
+    ))
+
   case user_result {
     types.UserSuccess(user) -> {
       // Display user info prominently
-      io.println("┌─ User Profile ──────────────────────────────────────────────┐")
+      io.println(
+        "┌─ User Profile ──────────────────────────────────────────────┐",
+      )
       io.println("│ 📱 Username: @" <> user.username)
       io.println("│ 🏆 Karma: " <> int.to_string(user.karma) <> " points")
-      io.println("│ 📚 Subscribed to " <> int.to_string(list.length(user.joined_subreddits)) <> " subreddit(s)")
+      io.println(
+        "│ 📚 Subscribed to "
+        <> int.to_string(list.length(user.joined_subreddits))
+        <> " subreddit(s)",
+      )
       io.println("│ 🟢 Status: Online")
-      io.println("└─────────────────────────────────────────────────────────────┘")
+      io.println(
+        "└─────────────────────────────────────────────────────────────┘",
+      )
       io.println("")
-      
+
       // Get their feed
       let feed =
-        actor.call(
-          feed_generator,
-          waiting: 5000,
-          sending: protocol.GetFeed(sample_user_id, 10, _),
-        )
-      
+        actor.call(feed_generator, waiting: 5000, sending: protocol.GetFeed(
+          sample_user_id,
+          10,
+          _,
+        ))
+
       case list.is_empty(feed) {
         True -> {
-          io.println("  No posts in feed yet (user hasn't joined any subreddits)")
+          io.println(
+            "  No posts in feed yet (user hasn't joined any subreddits)",
+          )
         }
         False -> {
-          io.println("🔥 Top " <> int.to_string(list.length(feed)) <> " Posts in Feed:")
-          io.println("═════════════════════════════════════════════════════════════")
-          
+          io.println(
+            "🔥 Top " <> int.to_string(list.length(feed)) <> " Posts in Feed:",
+          )
+          io.println(
+            "═════════════════════════════════════════════════════════════",
+          )
+
           list.index_map(feed, fn(feed_post, idx) {
             let score_indicator = case feed_post.score {
               s if s > 10 -> "🔥"
@@ -291,12 +356,12 @@ fn display_sample_feed(
               s if s == 0 -> "➖"
               _ -> "👎"
             }
-            
+
             let repost_indicator = case feed_post.post.is_repost {
               True -> " 🔁"
               False -> ""
             }
-            
+
             io.println("")
             io.println(
               score_indicator
@@ -319,16 +384,23 @@ fn display_sample_feed(
               <> int.to_string(feed_post.score)
               <> ")",
             )
-            
+
             // Display comments for the first post to show nested comment functionality
             case idx == 0 {
-              True -> display_post_comments(comment_manager, feed_post.post.id, user_registry)
+              True ->
+                display_post_comments(
+                  comment_manager,
+                  feed_post.post.id,
+                  user_registry,
+                )
               False -> Nil
             }
           })
-          
+
           io.println("")
-          io.println("═════════════════════════════════════════════════════════════")
+          io.println(
+            "═════════════════════════════════════════════════════════════",
+          )
           io.println("✅ Feed, nested comments, and karma tracking all working!")
         }
       }
@@ -337,7 +409,7 @@ fn display_sample_feed(
       io.println("  Could not load sample user feed")
     }
   }
-  
+
   io.println("")
 }
 
@@ -352,16 +424,18 @@ fn display_post_comments(
       waiting: 5000,
       sending: protocol.GetCommentsByPost(post_id, _),
     )
-  
+
   case list.is_empty(comments) {
     False -> {
       io.println("")
-      io.println("      💬 Comments (" <> int.to_string(list.length(comments)) <> "):")
-      
+      io.println(
+        "      💬 Comments (" <> int.to_string(list.length(comments)) <> "):",
+      )
+
       // Display root comments (no parent)
       let root_comments =
         list.filter(comments, fn(c) { c.parent_id == option.None })
-      
+
       list.each(root_comments, fn(comment) {
         display_comment_tree(comment, comments, user_registry, 0)
       })
@@ -378,22 +452,21 @@ fn display_comment_tree(
 ) -> Nil {
   // Get commenter username
   let username = case
-    actor.call(
-      user_registry,
-      waiting: 1000,
-      sending: protocol.GetUser(comment.author_id, _),
-    )
+    actor.call(user_registry, waiting: 1000, sending: protocol.GetUser(
+      comment.author_id,
+      _,
+    ))
   {
     types.UserSuccess(user) -> user.username
     _ -> "unknown"
   }
-  
+
   let indent = string.repeat("         ", depth)
   let connector = case depth {
     0 -> "      ├─"
     _ -> "   ├─"
   }
-  
+
   let score = comment.upvotes - comment.downvotes
   let score_indicator = case score {
     s if s > 5 -> "🔥"
@@ -402,18 +475,30 @@ fn display_comment_tree(
     s if s == 0 -> "➖"
     _ -> "👎"
   }
-  
-  io.println(indent <> connector <> " " <> score_indicator <> " u/" <> username <> ": " <> comment.content)
-  io.println(indent <> "      └─ ↑" <> int.to_string(comment.upvotes) <> " ↓" <> int.to_string(comment.downvotes))
-  
+
+  io.println(
+    indent
+    <> connector
+    <> " "
+    <> score_indicator
+    <> " u/"
+    <> username
+    <> ": "
+    <> comment.content,
+  )
+  io.println(
+    indent
+    <> "      └─ ↑"
+    <> int.to_string(comment.upvotes)
+    <> " ↓"
+    <> int.to_string(comment.downvotes),
+  )
+
   // Find and display child comments
   let children =
-    list.filter(all_comments, fn(c) {
-      c.parent_id == option.Some(comment.id)
-    })
-  
+    list.filter(all_comments, fn(c) { c.parent_id == option.Some(comment.id) })
+
   list.each(children, fn(child) {
     display_comment_tree(child, all_comments, user_registry, depth + 1)
   })
 }
-

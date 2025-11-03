@@ -47,6 +47,10 @@ pub type UserRegistryMessage {
     karma_delta: Int,
     reply: Subject(Result(Nil, String)),
   )
+  UpdateUserKarmaAsync(
+    user_id: UserId,
+    karma_delta: Int,
+  )
 }
 
 // Subreddit Manager Messages
@@ -112,6 +116,7 @@ pub type PostManagerMessage {
     vote_type: VoteType,
     reply: Subject(Result(Nil, String)),
   )
+  SetPostManagerUserRegistry(user_registry: Subject(UserRegistryMessage))
 }
 
 // Comment Manager Messages
@@ -137,6 +142,7 @@ pub type CommentManagerMessage {
     vote_type: VoteType,
     reply: Subject(Result(Nil, String)),
   )
+  SetCommentManagerUserRegistry(user_registry: Subject(UserRegistryMessage))
 }
 
 // Direct Message Manager Messages

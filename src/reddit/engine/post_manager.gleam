@@ -10,7 +10,7 @@ import gleam/option
 import gleam/otp/actor
 import gleam/result
 import gleam/string
-import reddit/protocol.{type PostManagerMessage}
+import reddit/protocol.{type PostManagerMessage, type UserRegistryMessage}
 import reddit/types.{
   type Post, type PostId, type PostResult, type SubredditId, type UserId,
   type VoteType, Post as PostType, PostError, PostNotFound, PostSuccess,
@@ -22,6 +22,7 @@ pub type State {
     posts_by_subreddit: Dict(SubredditId, List(PostId)),
     post_votes: Dict(PostId, Dict(UserId, VoteType)),
     next_id: Int,
+    user_registry: option.Option(Subject(UserRegistryMessage)),
   )
 }
 
@@ -32,12 +33,20 @@ pub fn start() -> actor.StartResult(Subject(PostManagerMessage)) {
       posts_by_subreddit: dict.new(),
       post_votes: dict.new(),
       next_id: 1,
+      user_registry: option.None,
     )
   
   let builder =
     actor.new(initial_state)
     |> actor.on_message(handle_message)
   actor.start(builder)
+}
+
+pub fn set_user_registry(
+  post_manager: Subject(PostManagerMessage),
+  user_registry: Subject(UserRegistryMessage),
+) -> Nil {
+  send(post_manager, protocol.SetPostManagerUserRegistry(user_registry))
 }
 
 fn handle_message(
@@ -78,6 +87,11 @@ fn handle_message(
     protocol.VotePost(post_id, user_id, vote_type, reply) -> {
       let #(result, new_state) = vote_post(state, post_id, user_id, vote_type)
       send(reply, result)
+      actor.continue(new_state)
+    }
+
+    protocol.SetPostManagerUserRegistry(user_registry) -> {
+      let new_state = State(..state, user_registry: option.Some(user_registry))
       actor.continue(new_state)
     }
   }
@@ -130,6 +144,7 @@ fn create_post(
           posts_by_subreddit: new_posts_by_subreddit,
           post_votes: new_post_votes,
           next_id: state.next_id + 1,
+          user_registry: state.user_registry,
         )
 
       #(PostSuccess(new_post), new_state)
@@ -205,6 +220,7 @@ fn create_repost(
           posts_by_subreddit: new_posts_by_subreddit,
           post_votes: new_post_votes,
           next_id: state.next_id + 1,
+          user_registry: state.user_registry,
         )
 
       #(PostSuccess(repost), new_state)
@@ -250,6 +266,16 @@ fn vote_post(
       // Update votes
       let new_votes = dict.insert(votes, user_id, vote_type)
       let new_post_votes = dict.insert(state.post_votes, post_id, new_votes)
+
+      // Update post author's karma
+      let karma_delta = upvote_delta - downvote_delta
+      case state.user_registry, karma_delta {
+        option.Some(user_reg), delta if delta != 0 -> {
+          // Send karma update (fire and forget)
+          send(user_reg, protocol.UpdateUserKarmaAsync(post.author_id, delta))
+        }
+        _, _ -> Nil
+      }
 
       let new_state =
         State(

@@ -78,6 +78,11 @@ fn handle_message(
       send(reply, result)
       actor.continue(new_state)
     }
+
+    protocol.UpdateUserKarmaAsync(user_id, karma_delta) -> {
+      let #(_result, new_state) = update_user_karma(state, user_id, karma_delta)
+      actor.continue(new_state)
+    }
   }
 }
 
