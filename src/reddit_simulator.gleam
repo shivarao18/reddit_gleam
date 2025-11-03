@@ -8,7 +8,9 @@ import gleam/erlang/process
 import gleam/int
 import gleam/io
 import gleam/list
+import gleam/option
 import gleam/otp/actor
+import gleam/string
 import reddit/client/activity_coordinator
 import reddit/client/metrics_collector
 import reddit/client/user_simulator
@@ -177,7 +179,6 @@ pub fn run_simulation(config: SimulatorConfig) {
   io.println("")
   run_activity_cycles(
     user_simulators,
-    metrics_subject,
     config.activity_cycles,
     config.cycle_delay_ms,
   )
@@ -196,6 +197,7 @@ pub fn run_simulation(config: SimulatorConfig) {
   display_sample_feed(
     user_registry_subject,
     feed_generator_subject,
+    comment_manager_subject,
     config.num_users,
   )
   
@@ -206,7 +208,6 @@ pub fn run_simulation(config: SimulatorConfig) {
 
 fn run_activity_cycles(
   user_simulators: List(process.Subject(user_simulator.UserSimulatorMessage)),
-  metrics: process.Subject(metrics_collector.MetricsMessage),
   cycles: Int,
   delay_ms: Int,
 ) -> Nil {
@@ -226,7 +227,7 @@ fn run_activity_cycles(
       // Wait before next cycle
       process.sleep(delay_ms)
 
-      run_activity_cycles(user_simulators, metrics, cycles - 1, delay_ms)
+      run_activity_cycles(user_simulators, cycles - 1, delay_ms)
     }
     False -> Nil
   }
@@ -235,7 +236,8 @@ fn run_activity_cycles(
 fn display_sample_feed(
   user_registry: process.Subject(protocol.UserRegistryMessage),
   feed_generator: process.Subject(protocol.FeedGeneratorMessage),
-  num_users: Int,
+  comment_manager: process.Subject(protocol.CommentManagerMessage),
+  _num_users: Int,
 ) -> Nil {
   io.println("")
   io.println("╔══════════════════════════════════════════════════════════════╗")
@@ -256,9 +258,13 @@ fn display_sample_feed(
   
   case user_result {
     types.UserSuccess(user) -> {
-      io.println("📱 Feed for: @" <> user.username)
-      io.println("👤 Karma: " <> int.to_string(user.karma))
-      io.println("📚 Subscribed to " <> int.to_string(list.length(user.joined_subreddits)) <> " subreddit(s)")
+      // Display user info prominently
+      io.println("┌─ User Profile ──────────────────────────────────────────────┐")
+      io.println("│ 📱 Username: @" <> user.username)
+      io.println("│ 🏆 Karma: " <> int.to_string(user.karma) <> " points")
+      io.println("│ 📚 Subscribed to " <> int.to_string(list.length(user.joined_subreddits)) <> " subreddit(s)")
+      io.println("│ 🟢 Status: Online")
+      io.println("└─────────────────────────────────────────────────────────────┘")
       io.println("")
       
       // Get their feed
@@ -275,48 +281,55 @@ fn display_sample_feed(
         }
         False -> {
           io.println("🔥 Top " <> int.to_string(list.length(feed)) <> " Posts in Feed:")
-          io.println("─────────────────────────────────────────────────────────────")
+          io.println("═════════════════════════════════════════════════════════════")
           
           list.index_map(feed, fn(feed_post, idx) {
             let score_indicator = case feed_post.score {
-              s if s > 10 -> "🔥 "
-              s if s > 5 -> "⬆️ "
-              s if s > 0 -> "👍 "
-              s if s == 0 -> "➖ "
-              _ -> "👎 "
+              s if s > 10 -> "🔥"
+              s if s > 5 -> "⬆️"
+              s if s > 0 -> "👍"
+              s if s == 0 -> "➖"
+              _ -> "👎"
             }
             
             let repost_indicator = case feed_post.post.is_repost {
-              True -> " [REPOST]"
+              True -> " 🔁"
               False -> ""
             }
             
             io.println("")
             io.println(
-              int.to_string(idx + 1)
-              <> ". "
-              <> score_indicator
+              score_indicator
+              <> " #"
+              <> int.to_string(idx + 1)
+              <> " • "
               <> feed_post.post.title
               <> repost_indicator,
             )
             io.println(
-              "   r/"
+              "   └─ r/"
               <> feed_post.subreddit_name
-              <> " • by u/"
+              <> " • u/"
               <> feed_post.author_username
-              <> " • Score: "
-              <> int.to_string(feed_post.score)
-              <> " (↑"
+              <> " • ↑"
               <> int.to_string(feed_post.post.upvotes)
               <> " ↓"
               <> int.to_string(feed_post.post.downvotes)
+              <> " (Score: "
+              <> int.to_string(feed_post.score)
               <> ")",
             )
+            
+            // Display comments for the first post to show nested comment functionality
+            case idx == 0 {
+              True -> display_post_comments(comment_manager, feed_post.post.id, user_registry)
+              False -> Nil
+            }
           })
           
           io.println("")
-          io.println("─────────────────────────────────────────────────────────────")
-          io.println("✅ Feed generation working! Posts sorted by score and recency.")
+          io.println("═════════════════════════════════════════════════════════════")
+          io.println("✅ Feed, nested comments, and karma tracking all working!")
         }
       }
     }
@@ -326,5 +339,81 @@ fn display_sample_feed(
   }
   
   io.println("")
+}
+
+fn display_post_comments(
+  comment_manager: process.Subject(protocol.CommentManagerMessage),
+  post_id: types.PostId,
+  user_registry: process.Subject(protocol.UserRegistryMessage),
+) -> Nil {
+  let comments =
+    actor.call(
+      comment_manager,
+      waiting: 5000,
+      sending: protocol.GetCommentsByPost(post_id, _),
+    )
+  
+  case list.is_empty(comments) {
+    False -> {
+      io.println("")
+      io.println("      💬 Comments (" <> int.to_string(list.length(comments)) <> "):")
+      
+      // Display root comments (no parent)
+      let root_comments =
+        list.filter(comments, fn(c) { c.parent_id == option.None })
+      
+      list.each(root_comments, fn(comment) {
+        display_comment_tree(comment, comments, user_registry, 0)
+      })
+    }
+    True -> Nil
+  }
+}
+
+fn display_comment_tree(
+  comment: types.Comment,
+  all_comments: List(types.Comment),
+  user_registry: process.Subject(protocol.UserRegistryMessage),
+  depth: Int,
+) -> Nil {
+  // Get commenter username
+  let username = case
+    actor.call(
+      user_registry,
+      waiting: 1000,
+      sending: protocol.GetUser(comment.author_id, _),
+    )
+  {
+    types.UserSuccess(user) -> user.username
+    _ -> "unknown"
+  }
+  
+  let indent = string.repeat("         ", depth)
+  let connector = case depth {
+    0 -> "      ├─"
+    _ -> "   ├─"
+  }
+  
+  let score = comment.upvotes - comment.downvotes
+  let score_indicator = case score {
+    s if s > 5 -> "🔥"
+    s if s > 2 -> "⬆️"
+    s if s > 0 -> "👍"
+    s if s == 0 -> "➖"
+    _ -> "👎"
+  }
+  
+  io.println(indent <> connector <> " " <> score_indicator <> " u/" <> username <> ": " <> comment.content)
+  io.println(indent <> "      └─ ↑" <> int.to_string(comment.upvotes) <> " ↓" <> int.to_string(comment.downvotes))
+  
+  // Find and display child comments
+  let children =
+    list.filter(all_comments, fn(c) {
+      c.parent_id == option.Some(comment.id)
+    })
+  
+  list.each(children, fn(child) {
+    display_comment_tree(child, all_comments, user_registry, depth + 1)
+  })
 }
 

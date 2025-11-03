@@ -8,7 +8,6 @@ import reddit/protocol.{
   type KarmaCalculatorMessage, type PostManagerMessage, type CommentManagerMessage,
   type UserRegistryMessage,
 }
-import reddit/types.{type UserId}
 
 pub type State {
   State(
@@ -41,7 +40,7 @@ fn handle_message(
   message: KarmaCalculatorMessage,
 ) -> actor.Next(State, KarmaCalculatorMessage) {
   case message {
-    protocol.CalculateKarmaForUser(user_id, reply) -> {
+    protocol.CalculateKarmaForUser(_user_id, reply) -> {
       // For now, we return a placeholder
       // In a full implementation, this would query post and comment managers
       // to calculate total karma from upvotes and downvotes
