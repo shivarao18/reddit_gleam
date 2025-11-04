@@ -37,7 +37,7 @@ The engine implements the following core features:
 ✅ **Voting & Karma**: Upvote/downvote posts and comments, calculate user karma  
 ✅ **Feed Generation**: Personalized feeds based on joined subreddits  
 ✅ **Direct Messages**: Send and receive DMs with conversation threading  
-✅ **Repost Functionality**: Repost existing content to different subreddits (bonus feature)
+✅ **Repost Functionality**: Repost existing content to different subreddits 
 
 ### Tester/Simulator Requirements
 The simulator provides realistic testing with:
@@ -322,72 +322,6 @@ User karma correctly reflects votes:
 
 ---
 
-## Challenges and Solutions
-
-### Challenge 1: Inter-Process Communication
-
-**Problem**: Initial attempt used distributed Erlang across separate OS processes, causing complex FFI issues and node connection problems.
-
-**Solution**: Simplified to use **Erlang processes (actors)** within a single BEAM VM. This maintains the "separate processes" requirement (separate Erlang processes) while avoiding distribution complexity for Part I.
-
-**Benefits**:
-- Faster message passing (in-memory)
-- No network/FFI overhead
-- Simpler debugging
-- Still satisfies concurrency requirements
-
-### Challenge 2: "Actor Discarding Unexpected Message" Warnings
-
-**Problem**: Karma update messages using dummy reply subjects caused warnings when the user registry sent replies that no one was listening for.
-
-**Solution**: Created `UpdateUserKarmaAsync` message type that doesn't require a reply (fire-and-forget pattern).
-
-**Implementation**:
-```gleam
-// Protocol definition
-UpdateUserKarmaAsync(user_id: UserId, karma_delta: Int)
-
-// Usage in post/comment managers
-send(user_registry, UpdateUserKarmaAsync(author_id, karma_delta))
-```
-
-**Result**: Zero warnings, clean simulation output
-
-### Challenge 3: Nested Comments Not Appearing
-
-**Problem**: Initially, all comments were top-level (no parent_id).
-
-**Solution**: Modified `user_simulator.gleam` to:
-- 40% chance to reply to an existing comment (nested)
-- Randomly select a parent comment from post's existing comments
-- Create hierarchical structure organically
-
-**Result**: Rich comment trees with multiple nesting levels
-
-### Challenge 4: Comments Not Receiving Votes
-
-**Problem**: Only posts were being voted on, comments always had 0 upvotes/downvotes.
-
-**Solution**: Modified `cast_vote` in user simulator:
-- 50% chance to vote on a post
-- 50% chance to vote on a comment
-- Randomly select from available comments
-
-**Result**: Comments now have realistic vote counts
-
-### Challenge 5: Zero Karma for All Users
-
-**Problem**: Karma was hardcoded to return 0; never calculated from actual votes.
-
-**Solution**: Implemented real-time karma updates:
-1. Added `user_registry` reference to `post_manager` and `comment_manager`
-2. When votes change, calculate karma delta
-3. Send async karma update to user registry
-4. User registry updates author's karma immediately
-
-**Result**: Users accumulate realistic karma scores (5-15 points typical)
-
----
 
 ## How to Run
 
