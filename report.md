@@ -461,10 +461,6 @@ reddit/
 
 ---
 
-**Author**: Reddit Clone Implementation Team  
-**Date**: November 2025  
-**Language**: Gleam v1.0.0  
-**Platform**: Erlang/OTP 26+  
+**Team Members**:  Shiva Kumar Thummanapalli and Ruchita Potamsetti
 
-**Status**: ✅ Part I Complete - Ready for Submission
 
