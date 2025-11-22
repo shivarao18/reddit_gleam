@@ -10,6 +10,10 @@ import gleam/list
 import gleam/string
 import mist
 import reddit/api/handlers/auth
+import reddit/api/handlers/comment
+import reddit/api/handlers/feed
+import reddit/api/handlers/post
+import reddit/api/handlers/subreddit
 import reddit/api/types
 import reddit/server_context.{type ServerContext}
 
@@ -20,10 +24,7 @@ pub fn handle_request(
 ) -> Response(mist.ResponseData) {
   // Log the request
   io.println(
-    "Request: "
-    <> http.method_to_string(req.method)
-    <> " "
-    <> req.path,
+    "Request: " <> http.method_to_string(req.method) <> " " <> req.path,
   )
 
   // Parse path segments
@@ -43,6 +44,30 @@ pub fn handle_request(
     // Authentication endpoints
     ["api", "auth", "register"] -> auth.register(req, ctx)
     ["api", "auth", "user", username] -> auth.get_user(req, ctx, username)
+
+    // Subreddit endpoints
+    ["api", "subreddits", "create"] -> subreddit.create(req, ctx)
+    ["api", "subreddits"] -> subreddit.list_all(req, ctx)
+    ["api", "subreddits", subreddit_id, "join"] ->
+      subreddit.join(req, ctx, subreddit_id)
+    ["api", "subreddits", subreddit_id, "leave"] ->
+      subreddit.leave(req, ctx, subreddit_id)
+
+    // Post endpoints
+    ["api", "posts", "create"] -> post.create(req, ctx)
+    ["api", "posts", post_id] -> post.get(req, ctx, post_id)
+    ["api", "posts", post_id, "vote"] -> post.vote(req, ctx, post_id)
+    ["api", "posts", post_id, "repost"] -> post.repost(req, ctx, post_id)
+    ["api", "posts", post_id, "comments"] ->
+      comment.get_by_post(req, ctx, post_id)
+
+    // Comment endpoints
+    ["api", "comments", "create"] -> comment.create(req, ctx)
+    ["api", "comments", comment_id, "vote"] ->
+      comment.vote(req, ctx, comment_id)
+
+    // Feed endpoints
+    ["api", "feed", user_id] -> feed.get_feed(req, ctx, user_id)
 
     // 404 for unknown routes
     _ -> not_found()
@@ -78,13 +103,50 @@ fn api_info(req: Request(mist.Connection)) -> Response(mist.ResponseData) {
             json.object([
               #("health", json.string("GET /health")),
               #("info", json.string("GET /")),
-              #("register", json.string("POST /api/auth/register")),
-              #("get_user", json.string("GET /api/auth/user/:username")),
+              #(
+                "auth",
+                json.object([
+                  #("register", json.string("POST /api/auth/register")),
+                  #("get_user", json.string("GET /api/auth/user/:username")),
+                ]),
+              ),
+              #(
+                "subreddits",
+                json.object([
+                  #("create", json.string("POST /api/subreddits/create")),
+                  #("list_all", json.string("GET /api/subreddits")),
+                  #("join", json.string("POST /api/subreddits/:id/join")),
+                  #("leave", json.string("POST /api/subreddits/:id/leave")),
+                ]),
+              ),
+              #(
+                "posts",
+                json.object([
+                  #("create", json.string("POST /api/posts/create")),
+                  #("get", json.string("GET /api/posts/:id")),
+                  #("vote", json.string("POST /api/posts/:id/vote")),
+                  #("repost", json.string("POST /api/posts/:id/repost")),
+                  #("comments", json.string("GET /api/posts/:id/comments")),
+                ]),
+              ),
+              #(
+                "comments",
+                json.object([
+                  #("create", json.string("POST /api/comments/create")),
+                  #("vote", json.string("POST /api/comments/:id/vote")),
+                ]),
+              ),
+              #(
+                "feed",
+                json.object([
+                  #("get_feed", json.string("GET /api/feed/:user_id")),
+                ]),
+              ),
             ]),
           ),
           #(
             "status",
-            json.string("Phase 2 Complete - Authentication endpoints ready"),
+            json.string("Phase 3 Complete - All core endpoints implemented"),
           ),
         ]),
       )
@@ -97,4 +159,3 @@ fn api_info(req: Request(mist.Connection)) -> Response(mist.ResponseData) {
 fn not_found() -> Response(mist.ResponseData) {
   types.not_found("The requested endpoint does not exist")
 }
-
