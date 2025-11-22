@@ -38,33 +38,51 @@ pub fn main() {
 
   // Step 2: Create a subreddit
   io.println("2️⃣  Creating subreddit 'r/gleamlang'...")
-  case create_subreddit(user_id, "gleamlang", "All things Gleam programming") {
-    Ok(sub_id) -> {
-      io.println("   ✅ Created! Subreddit ID: " <> sub_id)
+  let sub_id = case create_subreddit(user_id, "gleamlang", "All things Gleam programming") {
+    Ok(id) -> {
+      io.println("   ✅ Created! Subreddit ID: " <> id)
+      io.println("   ℹ️  (Creators are automatically members)")
+      id
     }
     Error(msg) -> {
       io.println("   ❌ Failed: " <> msg)
+      "sub_1"
     }
   }
   io.println("")
 
-  // Step 3: Join a subreddit
-  io.println("3️⃣  Joining subreddit 'sub_1'...")
-  case join_subreddit(user_id, "sub_1") {
+  // Step 3: Create another subreddit to join
+  io.println("3️⃣  Creating another subreddit 'r/programming'...")
+  let other_sub_id = case create_subreddit("user_0", "programming", "Programming discussions") {
+    Ok(id) -> {
+      io.println("   ✅ Created! Subreddit ID: " <> id)
+      id
+    }
+    Error(_) -> {
+      // If it already exists, assume it's sub_2
+      io.println("   ℹ️  Using existing subreddit")
+      "sub_2"
+    }
+  }
+  io.println("")
+
+  // Step 4: Join the other subreddit
+  io.println("4️⃣  Joining subreddit '" <> other_sub_id <> "'...")
+  case join_subreddit(user_id, other_sub_id) {
     Ok(_) -> {
       io.println("   ✅ Joined successfully!")
     }
     Error(msg) -> {
-      io.println("   ❌ Failed: " <> msg)
+      io.println("   ⚠️  Already a member or failed: " <> msg)
     }
   }
   io.println("")
 
-  // Step 4: Create a post
-  io.println("4️⃣  Creating a post...")
+  // Step 5: Create a post
+  io.println("5️⃣  Creating a post in '" <> sub_id <> "'...")
   let post_id = case create_post(
     user_id,
-    "sub_1",
+    sub_id,
     "My First Gleam Post!",
     "Hello everyone! Just started learning Gleam and loving it!",
   ) {
@@ -79,8 +97,8 @@ pub fn main() {
   }
   io.println("")
 
-  // Step 5: Add a comment
-  io.println("5️⃣  Adding a comment...")
+  // Step 6: Add a comment
+  io.println("6️⃣  Adding a comment...")
   case create_comment(user_id, post_id, "This is my first comment!") {
     Ok(comment_id) -> {
       io.println("   ✅ Commented! Comment ID: " <> comment_id)
@@ -91,8 +109,8 @@ pub fn main() {
   }
   io.println("")
 
-  // Step 6: Get user feed
-  io.println("6️⃣  Fetching personalized feed...")
+  // Step 7: Get user feed
+  io.println("7️⃣  Fetching personalized feed...")
   case get_feed(user_id) {
     Ok(feed_count) -> {
       io.println("   ✅ Feed retrieved! Posts in feed: " <> feed_count)
@@ -103,8 +121,8 @@ pub fn main() {
   }
   io.println("")
 
-  // Step 7: List all subreddits
-  io.println("7️⃣  Listing all subreddits...")
+  // Step 8: List all subreddits
+  io.println("8️⃣  Listing all subreddits...")
   case list_subreddits() {
     Ok(count) -> {
       io.println("   ✅ Found " <> count <> " subreddits")

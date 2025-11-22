@@ -1,11 +1,10 @@
 // Reddit Clone Multi-Client Load Tester
-// This demonstrates concurrent client connections to the REST API server
+// This demonstrates multiple independent clients connecting to the REST API server
 
 import gleam/erlang/process
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/otp/task
 import reddit_client
 
 pub fn main() {
@@ -15,28 +14,26 @@ pub fn main() {
   io.println("")
 
   let client_count = 5
-  io.println("🚀 Starting " <> int.to_string(client_count) <> " concurrent clients...")
+  io.println("🚀 Running " <> int.to_string(client_count) <> " independent clients...")
+  io.println("   (Each client is a separate HTTP connection)")
   io.println("")
 
-  // Spawn multiple concurrent client tasks
-  let tasks =
-    list.range(1, client_count)
-    |> list.map(fn(i) {
-      task.async(fn() {
-        run_client_simulation(i)
-      })
-    })
-
-  io.println("⏳ All clients running concurrently...")
-  io.println("")
-
-  // Wait for all tasks to complete
-  list.each(tasks, task.await_forever)
+  // Run multiple independent client simulations
+  // Each represents a separate user connecting to the API
+  list.range(1, client_count)
+  |> list.each(fn(i) {
+    run_client_simulation(i)
+    process.sleep(100)  // Small delay between clients for readability
+  })
 
   io.println("")
   io.println("╔══════════════════════════════════════════════════════════════╗")
   io.println("║  ✅ ALL " <> int.to_string(client_count) <> " CLIENTS COMPLETED SUCCESSFULLY!               ║")
   io.println("╚══════════════════════════════════════════════════════════════╝")
+  io.println("")
+  io.println("💡 Tip: To test true concurrency, run this program in multiple")
+  io.println("   terminals simultaneously, or run the bash test script which")
+  io.println("   can spawn background processes.")
 }
 
 fn run_client_simulation(client_id: Int) -> Nil {
