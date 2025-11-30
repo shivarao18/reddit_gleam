@@ -10,7 +10,7 @@ import gleam/list
 import gleam/result
 import gleam/string
 
-const base_url = "http://localhost:8080"
+const base_url = "http://localhost:3000"
 
 pub fn main() {
   io.println("╔══════════════════════════════════════════════════════════════╗")
@@ -38,7 +38,9 @@ pub fn main() {
 
   // Step 2: Create a subreddit
   io.println("2️⃣  Creating subreddit 'r/gleamlang'...")
-  let sub_id = case create_subreddit(user_id, "gleamlang", "All things Gleam programming") {
+  let sub_id = case
+    create_subreddit(user_id, "gleamlang", "All things Gleam programming")
+  {
     Ok(id) -> {
       io.println("   ✅ Created! Subreddit ID: " <> id)
       io.println("   ℹ️  (Creators are automatically members)")
@@ -53,7 +55,9 @@ pub fn main() {
 
   // Step 3: Create another subreddit to join
   io.println("3️⃣  Creating another subreddit 'r/programming'...")
-  let other_sub_id = case create_subreddit("user_0", "programming", "Programming discussions") {
+  let other_sub_id = case
+    create_subreddit("user_0", "programming", "Programming discussions")
+  {
     Ok(id) -> {
       io.println("   ✅ Created! Subreddit ID: " <> id)
       id
@@ -80,12 +84,14 @@ pub fn main() {
 
   // Step 5: Create a post
   io.println("5️⃣  Creating a post in '" <> sub_id <> "'...")
-  let post_id = case create_post(
-    user_id,
-    sub_id,
-    "My First Gleam Post!",
-    "Hello everyone! Just started learning Gleam and loving it!",
-  ) {
+  let post_id = case
+    create_post(
+      user_id,
+      sub_id,
+      "My First Gleam Post!",
+      "Hello everyone! Just started learning Gleam and loving it!",
+    )
+  {
     Ok(id) -> {
       io.println("   ✅ Posted! Post ID: " <> id)
       id
@@ -328,7 +334,8 @@ pub fn get_feed(user_id: String) -> Result(String, String) {
   case httpc.send(req) {
     Ok(resp) if resp.status == 200 -> {
       // Count posts in feed
-      let post_count = string.split(resp.body, "\"post_id\"") |> list.length |> fn(n) { n - 1 }
+      let post_count =
+        string.split(resp.body, "\"post_id\"") |> list.length |> fn(n) { n - 1 }
       Ok(string.inspect(post_count))
     }
     Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
@@ -343,7 +350,10 @@ pub fn list_subreddits() -> Result(String, String) {
   case httpc.send(req) {
     Ok(resp) if resp.status == 200 -> {
       // Count subreddits
-      let count = string.split(resp.body, "\"subreddit_id\"") |> list.length |> fn(n) { n - 1 }
+      let count =
+        string.split(resp.body, "\"subreddit_id\"")
+        |> list.length
+        |> fn(n) { n - 1 }
       Ok(string.inspect(count))
     }
     Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
@@ -351,3 +361,84 @@ pub fn list_subreddits() -> Result(String, String) {
   }
 }
 
+// Send a direct message
+pub fn send_dm(
+  from_user_id: String,
+  to_user_id: String,
+  content: String,
+) -> Result(String, String) {
+  let body =
+    json.object([
+      #("from_user_id", json.string(from_user_id)),
+      #("to_user_id", json.string(to_user_id)),
+      #("content", json.string(content)),
+    ])
+    |> json.to_string
+
+  let assert Ok(req) =
+    request.to(base_url <> "/api/dm/send")
+    |> result.map(request.set_method(_, http.Post))
+    |> result.map(request.set_body(_, body))
+    |> result.map(request.prepend_header(_, "content-type", "application/json"))
+
+  case httpc.send(req) {
+    Ok(resp) if resp.status == 200 || resp.status == 201 -> {
+      // Extract message_id
+      let parts = string.split(resp.body, "\"message_id\":\"")
+      case parts {
+        [_, rest, ..] -> {
+          let id_parts = string.split(rest, "\"")
+          case id_parts {
+            [message_id, ..] -> Ok(message_id)
+            _ -> Error("Failed to parse message_id")
+          }
+        }
+        _ -> Ok("sent")
+      }
+    }
+    Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
+    Error(_) -> Error("Connection failed")
+  }
+}
+
+// Get all direct messages for a user
+pub fn get_user_dms(user_id: String) -> Result(Int, String) {
+  let assert Ok(req) = request.to(base_url <> "/api/dm/user/" <> user_id)
+
+  case httpc.send(req) {
+    Ok(resp) if resp.status == 200 -> {
+      // Count messages
+      let count =
+        string.split(resp.body, "\"message_id\"")
+        |> list.length
+        |> fn(n) { n - 1 }
+      Ok(count)
+    }
+    Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
+    Error(_) -> Error("Connection failed")
+  }
+}
+
+// Get conversation between two users
+pub fn get_conversation(
+  user1_id: String,
+  user2_id: String,
+) -> Result(Int, String) {
+  let assert Ok(req) =
+    request.to(
+      base_url <> "/api/dm/conversation/" <> user1_id <> "/" <> user2_id,
+    )
+
+  case httpc.send(req) {
+    Ok(resp) if resp.status == 200 -> {
+      // Count messages in conversation
+      let count =
+        string.split(resp.body, "\"message_id\"")
+        |> list.length
+        |> fn(n) { n - 1 }
+      Ok(count)
+    }
+    Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
+    Error(_) -> Error("Connection failed")
+  }
+}

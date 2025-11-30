@@ -11,6 +11,7 @@ import gleam/string
 import mist
 import reddit/api/handlers/auth
 import reddit/api/handlers/comment
+import reddit/api/handlers/dm
 import reddit/api/handlers/feed
 import reddit/api/handlers/post
 import reddit/api/handlers/subreddit
@@ -68,6 +69,12 @@ pub fn handle_request(
 
     // Feed endpoints
     ["api", "feed", user_id] -> feed.get_feed(req, ctx, user_id)
+
+    // Direct Message endpoints
+    ["api", "dm", "send"] -> dm.send_dm(req, ctx)
+    ["api", "dm", "user", user_id] -> dm.get_user_dms(req, ctx, user_id)
+    ["api", "dm", "conversation", user1_id, user2_id] ->
+      dm.get_conversation(req, ctx, user1_id, user2_id)
 
     // 404 for unknown routes
     _ -> not_found()

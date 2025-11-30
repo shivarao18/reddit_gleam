@@ -87,20 +87,19 @@ pub fn main() {
   io.println("┌─ Starting HTTP Server ──────────────────────────────────────┐")
   let assert Ok(_) =
     mist.new(handler)
-    |> mist.port(8080)
+    |> mist.port(3000)
     |> mist.start
 
-  io.println("│   ✓ HTTP Server running on http://localhost:8080            │")
+  io.println("│   ✓ HTTP Server running on http://localhost:3000            │")
   io.println("│   ✓ Ready to accept client connections                      │")
   io.println("└─────────────────────────────────────────────────────────────┘")
   io.println("")
   io.println("╔══════════════════════════════════════════════════════════════╗")
   io.println("║          SERVER STARTED SUCCESSFULLY! ✓                      ║")
   io.println("║                                                              ║")
-  io.println("║  Try: curl http://localhost:8080/health                      ║")
+  io.println("║  Try: curl http://localhost:3000/health                      ║")
   io.println("╚══════════════════════════════════════════════════════════════╝")
 
   // Keep server running forever
   process.sleep_forever()
 }
-
