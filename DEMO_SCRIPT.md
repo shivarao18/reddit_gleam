@@ -1,29 +1,50 @@
 # Reddit Clone - Demo Script for Video Presentation
 
 ## Overview
-This demo script will guide you through a 5-minute demonstration showing:
+This demo script will guide you through a 5-minute **ONLINE** demonstration showing:
 1. How to run the code
 2. REST API communication between clients and server
 3. All major features working (user registration, subreddits, posts, comments, feed, direct messages)
 
 **Team Members**: Ruchita and Shiva
 
-**Demo Roles**:
-- **Person 1 (e.g., Ruchita)**: Narrator - explains concepts and architecture
-- **Person 2 (e.g., Shiva)**: Operator - runs commands and shows outputs
+**Online Recording Setup**:
+- **Platform**: Zoom/Teams/Google Meet (recommended)
+- **Shiva**: Shares screen, runs commands, shows outputs
+- **Ruchita**: Co-host on camera/audio, explains concepts and architecture
+- **Both**: Visible on camera for introduction and conclusion
 
 ---
 
 ## Setup (Before Recording)
 
 ### Pre-Demo Checklist
-1. Close any processes using port 3000
-2. Open 3 terminal windows side-by-side:
-   - **Terminal 1**: Server logs
-   - **Terminal 2**: Client operations
-   - **Terminal 3**: Direct API calls (curl)
-3. Clear terminal histories for clean recording
-4. Ensure `gleam` is in your PATH
+
+#### For Shiva (Screen Sharer):
+1. **Close any processes using port 3000**
+2. **Set up screen layout**:
+   - Open 3 terminal windows arranged clearly:
+     - **Terminal 1** (Left): Server logs - larger window
+     - **Terminal 2** (Top-right): Client operations
+     - **Terminal 3** (Bottom-right): Direct API calls (curl)
+   - Or use a single terminal with tabs if easier to navigate
+3. **Increase terminal font size**: 16-18pt minimum for visibility
+4. **Clear terminal histories** for clean recording
+5. **Ensure `gleam` is in your PATH**
+6. **Test screen share** before recording to ensure all text is readable
+7. **Close unnecessary apps**: Close Slack, email, notifications
+8. **Set Do Not Disturb mode**: Prevent notification popups
+
+#### For Ruchita (Co-host):
+1. **Prepare talking points**: Review explanation sections
+2. **Test microphone and camera**: Ensure good audio/video quality
+3. **Have script open**: Keep demo script visible (on separate monitor or device)
+
+#### For Both:
+1. **Test meeting platform**: Join 5 minutes early
+2. **Check internet connection**: Stable connection required
+3. **Mute notifications**: Both team members
+4. **Good lighting and quiet environment**
 
 ---
 
@@ -31,20 +52,28 @@ This demo script will guide you through a 5-minute demonstration showing:
 
 ### Part 1: Introduction & Setup (30 seconds)
 
-**RUCHITA**: "Hi, I'm Ruchita, and this is Shiva. We'll demonstrate our Reddit Clone REST API implementation. This project transforms a message-passing actor system into a full REST API server where clients communicate via HTTP."
+**BOTH ON CAMERA**:
 
-**SHIVA** (shows): Project structure
+**RUCHITA**: "Hi everyone! I'm Ruchita..."
+
+**SHIVA**: "...and I'm Shiva. We're presenting our Reddit Clone project for DOSP."
+
+**RUCHITA**: "For Part 1, we built a Reddit simulator using Gleam's actor model. For Part 2, which we're demonstrating today, we transformed it into a REST API server where all client-server communication happens via HTTP."
+
+**SHIVA**: "I'll be sharing my screen to show you the implementation. Ruchita will explain the concepts as we go."
+
+**SHIVA SHARES SCREEN** (shows project structure in Terminal 2):
 ```powershell
 # In Terminal 2
 ls src/
 ```
 
-**RUCHITA** (points out key files):
+**RUCHITA**: "You can see our project structure:
 - `reddit_server.gleam` - REST API server
-- `reddit_client.gleam` - HTTP client
-- `reddit/api/` - API handlers
+- `reddit_client.gleam` - HTTP client  
+- `reddit/api/` - API handlers with 18 endpoints
 
-**RUCHITA**: "We built this using Gleam, a type-safe functional language on the BEAM VM, with Mist for HTTP and Wisp for routing."
+We built this using Gleam, a type-safe functional language on the BEAM VM, with Mist for the HTTP server and Wisp for routing."
 
 ---
 
@@ -251,6 +280,8 @@ The server successfully handles multiple concurrent clients, all communicating v
 
 ### Part 12: Conclusion (15 seconds)
 
+**SHIVA STOPS SCREEN SHARE - BOTH RETURN TO CAMERA**
+
 **RUCHITA**: "To summarize, our demonstration showed:
 1. Starting the REST API server with 6 OTP actors
 2. All major features: registration, subreddits, posts, comments, voting, feeds, and direct messages
@@ -258,9 +289,13 @@ The server successfully handles multiple concurrent clients, all communicating v
 4. Server logs proving all communication is HTTP-based
 5. Concurrent client support with proper actor-based concurrency"
 
-**SHIVA**: "We successfully transformed the actor-based simulator into a production-ready REST API server using Gleam, Mist, and Wisp."
+**SHIVA**: "We successfully transformed the actor-based simulator into a production-ready REST API server using Gleam, Mist, and Wisp. All 18 REST endpoints are fully functional."
 
-**BOTH**: "Thank you!"
+**RUCHITA**: "Thanks for watching our demo!"
+
+**SHIVA**: "Any questions?"
+
+**BOTH**: "Thank you!" *[Wave to camera]*
 
 ---
 
@@ -291,36 +326,54 @@ powershell -ExecutionPolicy Bypass -File .\test_all.ps1
 
 ---
 
-## Tips for Recording
+## Tips for Online Recording
 
 ### Before You Start
-1. **Clean your terminals**: Clear command history
-2. **Increase font size**: Make text readable in video (16-18pt recommended)
-3. **Close unnecessary applications**: Reduce distractions
-4. **Test run once**: Ensure everything works smoothly
-5. **Decide roles**: Ruchita (narrator) and Shiva (operator), or alternate
+1. **Test meeting platform**: Join 5-10 minutes early, test screen share quality
+2. **Clean your terminals**: Clear command history and close unused tabs
+3. **Increase font size**: 16-18pt minimum - verify it's readable when screen sharing
+4. **Close unnecessary applications**: Close Slack, email, browsers with personal tabs
+5. **Mute notifications**: Set "Do Not Disturb" mode on both computers
+6. **Test run once**: Do a practice recording to catch any issues
+7. **Check backgrounds**: Both camera backgrounds should be professional/neutral
+8. **Stable internet**: Use wired connection if possible, close bandwidth-heavy apps
 
-### During Recording
-1. **Speak clearly**: Both team members should speak at a comfortable pace
-2. **Pause between sections**: Give viewers time to process
-3. **Point to logs**: Show the correlation between client calls and server logs
-4. **Highlight REST API**: Emphasize HTTP requests/responses in logs
-5. **Show JSON responses**: Demonstrate proper API responses
-6. **Coordinate transitions**: Smooth handoffs between Ruchita and Shiva
+### During Online Recording
+1. **Start with both on camera**: Introduce yourselves with video on
+2. **Announce screen share**: "Shiva is now sharing his screen..."
+3. **Speak clearly**: Account for potential audio lag or compression
+4. **Pause between sections**: Online viewers need slightly more processing time
+5. **Use mouse/cursor to point**: Since you can't physically point, use cursor to highlight
+6. **Zoom in if needed**: Ctrl/Cmd + Plus to increase terminal text if unclear
+7. **Confirm visibility**: Occasionally ask "Can everyone see the server logs here?"
+8. **Coordinate verbally**: Use names for transitions - "Ruchita, what's happening here?"
+9. **Watch pacing**: Online demos feel faster, slow down slightly
+10. **End with both on camera**: Return to camera view for conclusion
 
-### Division of Labor Suggestions
+### Division of Labor for Online Demo
 
-**Option A - Narrator/Operator**:
-- Ruchita: Explains concepts, architecture, and what's happening
-- Shiva: Runs commands, shows outputs, points to terminals
+**Recommended: Narrator/Operator (Best for Online)**:
+- **Shiva**: Shares screen, runs all commands, points with cursor to logs/outputs
+- **Ruchita**: Stays on camera (picture-in-picture if platform allows), explains concepts
+- **Why**: Keeps screen share stable, avoids switching hosts, clearer for viewers
 
-**Option B - Alternating**:
-- Alternate who speaks and operates every 2-3 sections
-- Keeps both members equally engaged
+**Alternative - Single Screen Share with Both**:
+- Shiva shares screen throughout
+- Both explain different sections (alternate by topic)
+- Both visible in gallery view or side-by-side camera tiles
 
-**Option C - Feature Split**:
-- Ruchita: Handles user/auth/subreddit features (Parts 1-5)
-- Shiva: Handles posts/comments/feed/DM features (Parts 6-12)
+**Not Recommended for Online**:
+- ❌ Switching screen share between members (causes disruption)
+- ❌ Both trying to control same screen (confusing)
+
+### Screen Sharing Best Practices
+
+1. **Share entire screen** (not just terminal window) - prevents awkward switching
+2. **Hide taskbar/dock** if possible for cleaner view
+3. **Use presenter view** if platform offers it
+4. **Highlight cursor**: Enable large cursor or use spotlight feature
+5. **Terminal arrangement**: Keep all 3 terminals visible when possible
+6. **Smooth transitions**: Move mouse slowly, give viewers time to read
 
 ### What to Emphasize
 ✅ **REST API Communication**: All client-server communication is HTTP-based
@@ -351,17 +404,21 @@ powershell -ExecutionPolicy Bypass -File .\test_all.ps1
 04:45 - 05:00   Conclusion (Both thank viewers)
 ```
 
-### Sample Opening Script
+### Sample Opening Script (Both on Camera)
 
 **RUCHITA**: "Hi everyone! I'm Ruchita..."
 
-**SHIVA**: "...and I'm Shiva. We're presenting our Reddit Clone project."
+**SHIVA**: "...and I'm Shiva. We're presenting our Reddit Clone project for DOSP."
 
-**RUCHITA**: "For Part 1, we built a Reddit simulator using Gleam's actor model with direct message passing."
+**RUCHITA**: "For Part 1, we built a Reddit simulator using Gleam's actor model with direct message passing between actors."
 
-**SHIVA**: "For Part 2, which we're demonstrating today, we transformed it into a REST API server where all client-server communication happens via HTTP."
+**SHIVA**: "For Part 2, which we're demonstrating today, we transformed it into a production-ready REST API server where all client-server communication happens via HTTP."
 
-**RUCHITA**: "Let's dive in and show you how it works!"
+**RUCHITA**: "I'll be explaining the architecture and features, while Shiva shares his screen and runs the demo."
+
+**SHIVA**: "Let me share my screen now... Can everyone see my terminal windows?"
+
+**RUCHITA**: "Great! Let's dive in and show you how it works!"
 
 ---
 
@@ -406,6 +463,36 @@ gleam run -m reddit_server
 - Check port 3000 availability
 - Rebuild with `gleam clean && gleam build`
 
+### Online Recording Specific Issues:
+
+**Screen share text too small**:
+- Increase terminal font size (Ctrl/Cmd + Plus)
+- Zoom in on entire screen if needed
+- Ask viewers "Can everyone read the text?"
+
+**Audio issues**:
+- Have backup: Both should have headphones with mic
+- Test audio before starting
+- Speak louder and clearer than normal
+
+**Internet lag**:
+- Close all other applications
+- Use wired connection if possible
+- Pause slightly longer between sections
+
+**Screen share freezes**:
+- Have backup plan: Stop share, restart, resume from checkpoint
+- Save terminal command history to quickly re-run if needed
+
+**Recording platform crashes**:
+- Have backup recording software running (OBS Studio)
+- Join from two devices as backup
+
+**Something goes wrong during demo**:
+- Stay calm, explain what happened
+- Use the automated test script as backup: `powershell -ExecutionPolicy Bypass -File .\test_all.ps1`
+- Have a pre-recorded backup video ready (optional)
+
 ---
 
 ## Quick Reference - All REST API Endpoints
@@ -428,4 +515,60 @@ gleam run -m reddit_server
 
 ---
 
-Good luck with your demo! 🎬
+## Platform-Specific Tips
+
+### Zoom
+- ✅ Enable "Share computer sound" if you want system sounds
+- ✅ Use "Optimize for video clip" for smoother screen share
+- ✅ Enable "Side-by-side mode" so both faces + screen are visible
+- ✅ Record to cloud for backup
+
+### Microsoft Teams
+- ✅ Use "Share desktop" rather than specific window
+- ✅ Turn on "Include computer sound"
+- ✅ Enable recording at start
+- ✅ Use "Together mode" or gallery view for both faces
+
+### Google Meet
+- ✅ Choose "Your entire screen" when sharing
+- ✅ Pin the shared screen for viewers
+- ✅ Record to Google Drive
+- ✅ Both should join from computers (not phones) for best quality
+
+### General for All Platforms
+- 📹 **Start recording immediately** - you can edit later
+- 🎤 **Test audio**: Do a 30-second test recording first
+- 📺 **1080p minimum**: Ensure platform is set to HD quality
+- ⏱️ **Time check**: Keep demo to 5 minutes, leave buffer for intro/outro
+- 💾 **Download immediately**: Save recording right after finishing
+
+---
+
+## Quick Checklist Before Going Live
+
+**5 Minutes Before**:
+- [ ] Both joined the meeting
+- [ ] Audio/video tested
+- [ ] Screen share tested
+- [ ] Terminal font size increased
+- [ ] Port 3000 available
+- [ ] All terminals cleared and ready
+- [ ] Notifications muted
+- [ ] Recording started
+
+**During Demo**:
+- [ ] Introduce both team members
+- [ ] Announce screen share start
+- [ ] Speak clearly and pace appropriately
+- [ ] Point with cursor to important elements
+- [ ] Return to camera for conclusion
+
+**After Demo**:
+- [ ] Stop recording
+- [ ] Download/save recording immediately
+- [ ] Review recording quality
+- [ ] Re-record if needed
+
+---
+
+Good luck with your online demo! 🎬
