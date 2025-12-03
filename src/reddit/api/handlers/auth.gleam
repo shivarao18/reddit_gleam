@@ -6,6 +6,7 @@ import gleam/http.{Get, Post}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/json
+import gleam/option
 import gleam/otp/actor
 import mist
 import reddit/api/types
@@ -38,14 +39,18 @@ fn register_user(
           // Extract username from JSON
           case types.extract_json_string_field(body_str, "username") {
             Ok(username) -> {
-              // Call engine actor to register user
+              // Parse optional public key from JSON
+              let public_key =
+                types.parse_optional_public_key_from_json(body_str)
+
+              // Call engine actor to register user with optional public key
               let result =
                 actor.call(
                   ctx.user_registry,
                   waiting: 5000,
-                  sending: protocol.RegisterUser(username, _),
+                  sending: protocol.RegisterUser(username, public_key, _),
                 )
-              
+
               // Convert result to HTTP response
               case result {
                 reddit_types.RegistrationSuccess(user) -> {
@@ -55,28 +60,37 @@ fn register_user(
                       #("username", json.string(user.username)),
                       #("karma", json.int(user.karma)),
                       #("created_at", json.int(user.created_at)),
+                      #(
+                        "public_key",
+                        types.optional_public_key_to_json(user.public_key),
+                      ),
+                      #("key_algorithm", case user.key_algorithm {
+                        option.Some(alg) ->
+                          json.string(types.key_algorithm_to_string(alg))
+                        option.None -> json.null()
+                      }),
                     ]),
                   )
                 }
-                
+
                 reddit_types.UsernameTaken -> {
                   types.conflict("Username is already taken")
                 }
-                
+
                 reddit_types.RegistrationError(reason) -> {
                   types.bad_request(reason)
                 }
               }
             }
-            
+
             Error(err) -> types.bad_request(err)
           }
         }
-        
+
         Error(_) -> types.bad_request("Invalid UTF-8 in request body")
       }
     }
-    
+
     Error(_) -> types.internal_error("Failed to read request body")
   }
 }
@@ -105,7 +119,7 @@ fn lookup_user(
       waiting: 5000,
       sending: protocol.GetUserByUsername(username, _),
     )
-  
+
   case result {
     reddit_types.UserSuccess(user) -> {
       types.success_response(
@@ -113,20 +127,22 @@ fn lookup_user(
           #("user_id", json.string(user.id)),
           #("username", json.string(user.username)),
           #("karma", json.int(user.karma)),
-          #("joined_subreddits", json.array(user.joined_subreddits, json.string)),
+          #(
+            "joined_subreddits",
+            json.array(user.joined_subreddits, json.string),
+          ),
           #("is_online", json.bool(user.is_online)),
           #("created_at", json.int(user.created_at)),
         ]),
       )
     }
-    
+
     reddit_types.UserNotFound -> {
       types.not_found("User not found")
     }
-    
+
     reddit_types.UserError(reason) -> {
       types.internal_error(reason)
     }
   }
 }
-

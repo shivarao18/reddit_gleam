@@ -5,6 +5,7 @@
 
 import gleam/erlang/process.{type Subject}
 import gleam/option.{type Option}
+import reddit/crypto/types as crypto_types
 import reddit/types.{
   type Comment, type CommentId, type CommentResult, type DirectMessage,
   type DirectMessageId, type DirectMessageResult, type FeedPost, type Post,
@@ -17,16 +18,11 @@ import reddit/types.{
 pub type UserRegistryMessage {
   RegisterUser(
     username: String,
+    public_key: Option(crypto_types.PublicKey),
     reply: Subject(RegistrationResult),
   )
-  GetUser(
-    user_id: UserId,
-    reply: Subject(UserResult),
-  )
-  GetUserByUsername(
-    username: String,
-    reply: Subject(UserResult),
-  )
+  GetUser(user_id: UserId, reply: Subject(UserResult))
+  GetUserByUsername(username: String, reply: Subject(UserResult))
   UpdateUserOnlineStatus(
     user_id: UserId,
     is_online: Bool,
@@ -47,10 +43,7 @@ pub type UserRegistryMessage {
     karma_delta: Int,
     reply: Subject(Result(Nil, String)),
   )
-  UpdateUserKarmaAsync(
-    user_id: UserId,
-    karma_delta: Int,
-  )
+  UpdateUserKarmaAsync(user_id: UserId, karma_delta: Int)
 }
 
 // Subreddit Manager Messages
@@ -61,14 +54,8 @@ pub type SubredditManagerMessage {
     creator_id: UserId,
     reply: Subject(SubredditResult),
   )
-  GetSubreddit(
-    subreddit_id: SubredditId,
-    reply: Subject(SubredditResult),
-  )
-  GetSubredditByName(
-    name: String,
-    reply: Subject(SubredditResult),
-  )
+  GetSubreddit(subreddit_id: SubredditId, reply: Subject(SubredditResult))
+  GetSubredditByName(name: String, reply: Subject(SubredditResult))
   JoinSubreddit(
     subreddit_id: SubredditId,
     user_id: UserId,
@@ -79,9 +66,7 @@ pub type SubredditManagerMessage {
     user_id: UserId,
     reply: Subject(Result(Nil, String)),
   )
-  ListAllSubreddits(
-    reply: Subject(List(Subreddit)),
-  )
+  ListAllSubreddits(reply: Subject(List(Subreddit)))
 }
 
 // Post Manager Messages
@@ -91,6 +76,7 @@ pub type PostManagerMessage {
     author_id: UserId,
     title: String,
     content: String,
+    signature: Option(crypto_types.DigitalSignature),
     reply: Subject(PostResult),
   )
   CreateRepost(
@@ -99,17 +85,9 @@ pub type PostManagerMessage {
     subreddit_id: SubredditId,
     reply: Subject(PostResult),
   )
-  GetPost(
-    post_id: PostId,
-    reply: Subject(PostResult),
-  )
-  GetPostsBySubreddit(
-    subreddit_id: SubredditId,
-    reply: Subject(List(Post)),
-  )
-  GetAllPosts(
-    reply: Subject(List(Post)),
-  )
+  GetPost(post_id: PostId, reply: Subject(PostResult))
+  GetPostsBySubreddit(subreddit_id: SubredditId, reply: Subject(List(Post)))
+  GetAllPosts(reply: Subject(List(Post)))
   VotePost(
     post_id: PostId,
     user_id: UserId,
@@ -128,14 +106,8 @@ pub type CommentManagerMessage {
     parent_id: Option(CommentId),
     reply: Subject(CommentResult),
   )
-  GetComment(
-    comment_id: CommentId,
-    reply: Subject(CommentResult),
-  )
-  GetCommentsByPost(
-    post_id: PostId,
-    reply: Subject(List(Comment)),
-  )
+  GetComment(comment_id: CommentId, reply: Subject(CommentResult))
+  GetCommentsByPost(post_id: PostId, reply: Subject(List(Comment)))
   VoteComment(
     comment_id: CommentId,
     user_id: UserId,
@@ -154,10 +126,7 @@ pub type DirectMessageManagerMessage {
     reply_to_id: Option(DirectMessageId),
     reply: Subject(DirectMessageResult),
   )
-  GetDirectMessages(
-    user_id: UserId,
-    reply: Subject(List(DirectMessage)),
-  )
+  GetDirectMessages(user_id: UserId, reply: Subject(List(DirectMessage)))
   GetConversation(
     user1_id: UserId,
     user2_id: UserId,
@@ -167,21 +136,11 @@ pub type DirectMessageManagerMessage {
 
 // Feed Generator Messages
 pub type FeedGeneratorMessage {
-  GetFeed(
-    user_id: UserId,
-    limit: Int,
-    reply: Subject(List(FeedPost)),
-  )
+  GetFeed(user_id: UserId, limit: Int, reply: Subject(List(FeedPost)))
 }
 
 // Karma Calculator Messages
 pub type KarmaCalculatorMessage {
-  CalculateKarmaForUser(
-    user_id: UserId,
-    reply: Subject(Int),
-  )
-  RecalculateAllKarma(
-    reply: Subject(Result(Nil, String)),
-  )
+  CalculateKarmaForUser(user_id: UserId, reply: Subject(Int))
+  RecalculateAllKarma(reply: Subject(Result(Nil, String)))
 }
-

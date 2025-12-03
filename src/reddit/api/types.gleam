@@ -4,11 +4,14 @@
 import gleam/bytes_tree
 import gleam/dynamic.{type Dynamic}
 import gleam/http/response.{type Response}
+import gleam/int
 import gleam/json.{type Json}
 import gleam/list
+import gleam/option
 import gleam/result
 import gleam/string
 import mist
+import reddit/crypto/types as crypto_types
 
 /// Standard API response with success flag and data
 pub type ApiResponse(data) {
@@ -32,9 +35,8 @@ pub fn json_response(
 
 /// Helper to create a success response
 pub fn success_response(data: json.Json) -> Response(mist.ResponseData) {
-  let body =
-    json.object([#("success", json.bool(True)), #("data", data)])
-  
+  let body = json.object([#("success", json.bool(True)), #("data", data)])
+
   json_response(body, 200)
 }
 
@@ -50,7 +52,7 @@ pub fn error_response(
       #("error", json.string(error)),
       #("message", json.string(message)),
     ])
-  
+
   json_response(body, status)
 }
 
@@ -76,9 +78,8 @@ pub fn internal_error(message: String) -> Response(mist.ResponseData) {
 
 /// Helper to create a 201 Created response
 pub fn created(data: json.Json) -> Response(mist.ResponseData) {
-  let body =
-    json.object([#("success", json.bool(True)), #("data", data)])
-  
+  let body = json.object([#("success", json.bool(True)), #("data", data)])
+
   json_response(body, 201)
 }
 
@@ -89,8 +90,7 @@ pub fn extract_json_string_field(
   field: String,
 ) -> Result(String, String) {
   // Look for "field": "value" pattern
-  let pattern = "\"" <> field <> "\":" 
-  
+  let pattern = "\"" <> field <> "\":"
   case string.split(json_string, pattern) {
     [_, rest, ..] -> {
       // Find the value after the colon
@@ -111,3 +111,122 @@ pub fn extract_json_string_field(
   }
 }
 
+// ===== Crypto JSON Encoding/Decoding Functions =====
+
+/// Convert KeyAlgorithm to JSON string
+pub fn key_algorithm_to_string(alg: crypto_types.KeyAlgorithm) -> String {
+  case alg {
+    crypto_types.RSA2048 -> "RSA2048"
+    crypto_types.ECDSAP256 -> "ECDSAP256"
+  }
+}
+
+/// Parse KeyAlgorithm from string
+pub fn string_to_key_algorithm(
+  s: String,
+) -> Result(crypto_types.KeyAlgorithm, String) {
+  case s {
+    "RSA2048" -> Ok(crypto_types.RSA2048)
+    "ECDSAP256" -> Ok(crypto_types.ECDSAP256)
+    _ ->
+      Error("Invalid key algorithm: " <> s <> ". Must be RSA2048 or ECDSAP256")
+  }
+}
+
+/// Encode PublicKey to JSON object
+pub fn public_key_to_json(pk: crypto_types.PublicKey) -> json.Json {
+  json.object([
+    #("algorithm", json.string(key_algorithm_to_string(pk.algorithm))),
+    #("key_data", json.string(pk.key_data)),
+  ])
+}
+
+/// Encode optional PublicKey to JSON (None becomes null)
+pub fn optional_public_key_to_json(
+  pk: option.Option(crypto_types.PublicKey),
+) -> json.Json {
+  case pk {
+    option.Some(key) -> public_key_to_json(key)
+    option.None -> json.null()
+  }
+}
+
+/// Encode DigitalSignature to JSON object
+pub fn signature_to_json(sig: crypto_types.DigitalSignature) -> json.Json {
+  json.object([
+    #("signature_data", json.string(sig.signature_data)),
+    #("algorithm", json.string(key_algorithm_to_string(sig.algorithm))),
+    #("signed_at", json.int(sig.signed_at)),
+  ])
+}
+
+/// Encode optional DigitalSignature to JSON
+pub fn optional_signature_to_json(
+  sig: option.Option(crypto_types.DigitalSignature),
+) -> json.Json {
+  case sig {
+    option.Some(s) -> signature_to_json(s)
+    option.None -> json.null()
+  }
+}
+
+/// Parse optional public key from JSON string fields
+/// Expects: "public_key" and "key_algorithm" fields in JSON
+pub fn parse_optional_public_key_from_json(
+  json_string: String,
+) -> option.Option(crypto_types.PublicKey) {
+  case extract_json_string_field(json_string, "public_key") {
+    Error(_) -> option.None
+    Ok(key_data) -> {
+      case extract_json_string_field(json_string, "key_algorithm") {
+        Error(_) -> option.None
+        Ok(alg_str) -> {
+          case string_to_key_algorithm(alg_str) {
+            Error(_) -> option.None
+            Ok(algorithm) -> {
+              option.Some(crypto_types.PublicKey(
+                algorithm: algorithm,
+                key_data: key_data,
+              ))
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Parse optional signature from JSON string fields
+/// Expects: "signature_data", "signature_algorithm", and "signature_timestamp" fields
+pub fn parse_optional_signature_from_json(
+  json_string: String,
+) -> option.Option(crypto_types.DigitalSignature) {
+  case extract_json_string_field(json_string, "signature_data") {
+    Error(_) -> option.None
+    Ok(sig_data) -> {
+      case extract_json_string_field(json_string, "signature_algorithm") {
+        Error(_) -> option.None
+        Ok(alg_str) -> {
+          case string_to_key_algorithm(alg_str) {
+            Error(_) -> option.None
+            Ok(algorithm) -> {
+              // Timestamp is optional, default to current time if not provided
+              let signed_at = case
+                extract_json_string_field(json_string, "signature_timestamp")
+              {
+                Ok(ts) -> result.unwrap(int.parse(ts), 0)
+                Error(_) -> 0
+              }
+
+              option.Some(crypto_types.DigitalSignature(
+                signature_data: sig_data,
+                algorithm: algorithm,
+                signed_at: signed_at,
+              ))
+            }
+          }
+        }
+      }
+    }
+  }
+}

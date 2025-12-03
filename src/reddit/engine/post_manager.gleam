@@ -10,6 +10,7 @@ import gleam/option
 import gleam/otp/actor
 import gleam/result
 import gleam/string
+import reddit/crypto/types as crypto_types
 import reddit/protocol.{type PostManagerMessage, type UserRegistryMessage}
 import reddit/types.{
   type Post, type PostId, type PostResult, type SubredditId, type UserId,
@@ -35,7 +36,7 @@ pub fn start() -> actor.StartResult(Subject(PostManagerMessage)) {
       next_id: 1,
       user_registry: option.None,
     )
-  
+
   let builder =
     actor.new(initial_state)
     |> actor.on_message(handle_message)
@@ -54,14 +55,23 @@ fn handle_message(
   message: PostManagerMessage,
 ) -> actor.Next(State, PostManagerMessage) {
   case message {
-    protocol.CreatePost(subreddit_id, author_id, title, content, reply) -> {
-      let #(result, new_state) = create_post(state, subreddit_id, author_id, title, content)
+    protocol.CreatePost(
+      subreddit_id,
+      author_id,
+      title,
+      content,
+      signature,
+      reply,
+    ) -> {
+      let #(result, new_state) =
+        create_post(state, subreddit_id, author_id, title, content, signature)
       send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.CreateRepost(original_post_id, author_id, subreddit_id, reply) -> {
-      let #(result, new_state) = create_repost(state, original_post_id, author_id, subreddit_id)
+      let #(result, new_state) =
+        create_repost(state, original_post_id, author_id, subreddit_id)
       send(reply, result)
       actor.continue(new_state)
     }
@@ -103,6 +113,7 @@ fn create_post(
   author_id: UserId,
   title: String,
   content: String,
+  signature: option.Option(crypto_types.DigitalSignature),
 ) -> #(PostResult, State) {
   case string.trim(title) {
     "" -> #(PostError("Post title cannot be empty"), state)
@@ -122,6 +133,7 @@ fn create_post(
           created_at: timestamp,
           is_repost: False,
           original_post_id: option.None,
+          signature: signature,
         )
 
       // Update posts dict
@@ -133,7 +145,11 @@ fn create_post(
         |> result.unwrap([])
       let updated_subreddit_posts = [post_id, ..existing_posts]
       let new_posts_by_subreddit =
-        dict.insert(state.posts_by_subreddit, subreddit_id, updated_subreddit_posts)
+        dict.insert(
+          state.posts_by_subreddit,
+          subreddit_id,
+          updated_subreddit_posts,
+        )
 
       // Initialize empty votes dict for this post
       let new_post_votes = dict.insert(state.post_votes, post_id, dict.new())
@@ -164,9 +180,7 @@ fn get_posts_by_subreddit(state: State, subreddit_id: SubredditId) -> List(Post)
     dict.get(state.posts_by_subreddit, subreddit_id)
     |> result.unwrap([])
 
-  list.filter_map(post_ids, fn(post_id) {
-    dict.get(state.posts, post_id)
-  })
+  list.filter_map(post_ids, fn(post_id) { dict.get(state.posts, post_id) })
 }
 
 fn get_all_posts(state: State) -> List(Post) {
@@ -198,6 +212,7 @@ fn create_repost(
           created_at: timestamp,
           is_repost: True,
           original_post_id: option.Some(original_post_id),
+          signature: option.None,
         )
 
       // Update posts dict
@@ -209,7 +224,11 @@ fn create_repost(
         |> result.unwrap([])
       let updated_subreddit_posts = [post_id, ..existing_posts]
       let new_posts_by_subreddit =
-        dict.insert(state.posts_by_subreddit, subreddit_id, updated_subreddit_posts)
+        dict.insert(
+          state.posts_by_subreddit,
+          subreddit_id,
+          updated_subreddit_posts,
+        )
 
       // Initialize empty votes dict for this repost
       let new_post_votes = dict.insert(state.post_votes, post_id, dict.new())
@@ -278,11 +297,7 @@ fn vote_post(
       }
 
       let new_state =
-        State(
-          ..state,
-          posts: new_posts,
-          post_votes: new_post_votes,
-        )
+        State(..state, posts: new_posts, post_votes: new_post_votes)
 
       #(Ok(Nil), new_state)
     }
@@ -298,4 +313,3 @@ fn get_timestamp() -> Int {
   |> int.divide(1_000_000)
   |> result.unwrap(0)
 }
-

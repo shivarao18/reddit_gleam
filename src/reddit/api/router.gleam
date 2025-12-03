@@ -15,6 +15,7 @@ import reddit/api/handlers/dm
 import reddit/api/handlers/feed
 import reddit/api/handlers/post
 import reddit/api/handlers/subreddit
+import reddit/api/handlers/user
 import reddit/api/types
 import reddit/server_context.{type ServerContext}
 
@@ -45,6 +46,10 @@ pub fn handle_request(
     // Authentication endpoints
     ["api", "auth", "register"] -> auth.register(req, ctx)
     ["api", "auth", "user", username] -> auth.get_user(req, ctx, username)
+
+    // User endpoints
+    ["api", "users", user_id, "public-key"] ->
+      user.get_public_key(req, ctx, user_id)
 
     // Subreddit endpoints
     ["api", "subreddits", "create"] -> subreddit.create(req, ctx)

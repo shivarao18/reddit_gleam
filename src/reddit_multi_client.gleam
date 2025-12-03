@@ -1,21 +1,25 @@
 // Reddit Clone Multi-Client Load Tester
 // This demonstrates multiple independent clients connecting to the REST API server
+// Phase 4: Now includes cryptographic key generation and post signing
 
 import gleam/erlang/process
 import gleam/int
 import gleam/io
 import gleam/list
+import reddit/crypto/key_manager
 import reddit_client
 
 pub fn main() {
   io.println("╔══════════════════════════════════════════════════════════════╗")
-  io.println("║     REDDIT CLONE - MULTI-CLIENT LOAD TEST                   ║")
+  io.println("║   REDDIT CLONE - MULTI-CLIENT LOAD TEST (WITH CRYPTO)       ║")
   io.println("╚══════════════════════════════════════════════════════════════╝")
   io.println("")
 
   let client_count = 5
-  io.println("🚀 Running " <> int.to_string(client_count) <> " independent clients...")
-  io.println("   (Each client is a separate HTTP connection)")
+  io.println(
+    "🚀 Running " <> int.to_string(client_count) <> " independent clients...",
+  )
+  io.println("   (Each client generates its own key pair and signs posts)")
   io.println("")
 
   // Run multiple independent client simulations
@@ -23,12 +27,17 @@ pub fn main() {
   list.range(1, client_count)
   |> list.each(fn(i) {
     run_client_simulation(i)
-    process.sleep(100)  // Small delay between clients for readability
+    process.sleep(100)
+    // Small delay between clients for readability
   })
 
   io.println("")
   io.println("╔══════════════════════════════════════════════════════════════╗")
-  io.println("║  ✅ ALL " <> int.to_string(client_count) <> " CLIENTS COMPLETED SUCCESSFULLY!               ║")
+  io.println(
+    "║  ✅ ALL "
+    <> int.to_string(client_count)
+    <> " CLIENTS COMPLETED SUCCESSFULLY!               ║",
+  )
   io.println("╚══════════════════════════════════════════════════════════════╝")
   io.println("")
   io.println("💡 Tip: To test true concurrency, run this program in multiple")
@@ -42,10 +51,26 @@ fn run_client_simulation(client_id: Int) -> Nil {
 
   io.println(client_tag <> " Starting simulation...")
 
-  // Register user
-  let user_id = case reddit_client.register_user(username) {
+  // Phase 4: Generate cryptographic key pair
+  let keypair = case key_manager.generate_rsa_keypair() {
+    Ok(kp) -> {
+      io.println(client_tag <> " 🔐 Generated RSA-2048 key pair")
+      kp
+    }
+    Error(e) -> {
+      io.println(client_tag <> " ❌ Key generation failed: " <> e)
+      panic as "Cannot proceed without keys"
+    }
+  }
+
+  // Register user with public key
+  let user_id = case
+    reddit_client.register_user_with_key(username, keypair.public)
+  {
     Ok(id) -> {
-      io.println(client_tag <> " ✅ Registered as " <> username)
+      io.println(
+        client_tag <> " ✅ Registered as " <> username <> " (with public key)",
+      )
       id
     }
     Error(_) -> {
@@ -59,11 +84,13 @@ fn run_client_simulation(client_id: Int) -> Nil {
 
   // Create a subreddit
   let subreddit_name = "testsub" <> int.to_string(client_id)
-  case reddit_client.create_subreddit(
-    user_id,
-    subreddit_name,
-    "Test subreddit by " <> username,
-  ) {
+  case
+    reddit_client.create_subreddit(
+      user_id,
+      subreddit_name,
+      "Test subreddit by " <> username,
+    )
+  {
     Ok(_) -> {
       io.println(client_tag <> " ✅ Created r/" <> subreddit_name)
     }
@@ -80,27 +107,25 @@ fn run_client_simulation(client_id: Int) -> Nil {
 
   process.sleep(50)
 
-  // Create multiple posts
+  // Create multiple SIGNED posts
   list.each(list.range(1, 3), fn(post_num) {
-    case reddit_client.create_post(
-      user_id,
-      "sub_1",
-      "Post #" <> int.to_string(post_num) <> " by " <> username,
-      "This is test content from client " <> int.to_string(client_id),
-    ) {
+    case
+      reddit_client.create_signed_post(
+        user_id,
+        "sub_1",
+        "Post #" <> int.to_string(post_num) <> " by " <> username,
+        "This is test content from client " <> int.to_string(client_id),
+        keypair.private,
+      )
+    {
       Ok(_) -> {
         io.println(
-          client_tag
-          <> " ✅ Created post #"
-          <> int.to_string(post_num),
+          client_tag <> " ✅ Created SIGNED post #" <> int.to_string(post_num),
         )
       }
       Error(_) -> {
         io.println(
-          client_tag
-          <> " ⚠️  Post #"
-          <> int.to_string(post_num)
-          <> " failed",
+          client_tag <> " ⚠️  Post #" <> int.to_string(post_num) <> " failed",
         )
       }
     }
@@ -119,4 +144,3 @@ fn run_client_simulation(client_id: Int) -> Nil {
 
   io.println(client_tag <> " ✨ Simulation complete!")
 }
-

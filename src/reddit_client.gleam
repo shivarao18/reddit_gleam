@@ -1,32 +1,61 @@
 // Reddit Clone CLI Client - Interactive command-line client
 // This demonstrates how to interact with the REST API from a client application
+// Phase 4: Now includes cryptographic key generation and post signing
 
 import gleam/http
 import gleam/http/request
 import gleam/httpc
+import gleam/int
 import gleam/io
 import gleam/json
 import gleam/list
+import gleam/option
 import gleam/result
 import gleam/string
+import reddit/crypto/key_manager
+import reddit/crypto/signature
+import reddit/crypto/types as crypto_types
 
 const base_url = "http://localhost:3000"
 
 pub fn main() {
   io.println("╔══════════════════════════════════════════════════════════════╗")
-  io.println("║        REDDIT CLONE - CLI CLIENT DEMO                       ║")
+  io.println("║        REDDIT CLONE - CLI CLIENT DEMO (WITH CRYPTO)         ║")
   io.println("╚══════════════════════════════════════════════════════════════╝")
   io.println("")
 
-  // Scenario: Alice's journey through Reddit
-  io.println("📖 Scenario: Alice joins Reddit and explores...")
+  // Phase 4: Generate cryptographic key pair
+  io.println("🔐 CRYPTO SETUP")
+  io.println("───────────────────────────────────────────────────────────────")
+  io.println("0️⃣  Generating RSA-2048 key pair for Alice...")
+  let keypair = case key_manager.generate_rsa_keypair() {
+    Ok(kp) -> {
+      io.println("   ✅ Key pair generated successfully!")
+      io.println(
+        "   🔑 Public key (first 60 chars): "
+        <> string.slice(kp.public.key_data, 0, 60)
+        <> "...",
+      )
+      kp
+    }
+    Error(e) -> {
+      io.println("   ❌ Failed to generate keys: " <> e)
+      panic as "Cannot proceed without keys"
+    }
+  }
   io.println("")
 
-  // Step 1: Register Alice
-  io.println("1️⃣  Registering user 'alice'...")
-  let user_id = case register_user("alice") {
+  // Scenario: Alice's journey through Reddit
+  io.println("📖 SCENARIO: Alice joins Reddit and explores...")
+  io.println("───────────────────────────────────────────────────────────────")
+  io.println("")
+
+  // Step 1: Register Alice with public key
+  io.println("1️⃣  Registering user 'alice' with public key...")
+  let user_id = case register_user_with_key("alice", keypair.public) {
     Ok(id) -> {
       io.println("   ✅ Registered! User ID: " <> id)
+      io.println("   🔑 Public key stored on server")
       id
     }
     Error(msg) -> {
@@ -82,18 +111,20 @@ pub fn main() {
   }
   io.println("")
 
-  // Step 5: Create a post
-  io.println("5️⃣  Creating a post in '" <> sub_id <> "'...")
+  // Step 5: Create a signed post
+  io.println("5️⃣  Creating a SIGNED post in '" <> sub_id <> "'...")
   let post_id = case
-    create_post(
+    create_signed_post(
       user_id,
       sub_id,
       "My First Gleam Post!",
       "Hello everyone! Just started learning Gleam and loving it!",
+      keypair.private,
     )
   {
     Ok(id) -> {
       io.println("   ✅ Posted! Post ID: " <> id)
+      io.println("   ✍️  Post digitally signed with RSA-2048")
       id
     }
     Error(msg) -> {
@@ -175,6 +206,112 @@ pub fn register_user(username: String) -> Result(String, String) {
           }
         }
         False -> Error("Invalid response format")
+      }
+    }
+    Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
+    Error(_) -> Error("Connection failed")
+  }
+}
+
+// Phase 4: Register a new user with cryptographic public key
+pub fn register_user_with_key(
+  username: String,
+  public_key: crypto_types.PublicKey,
+) -> Result(String, String) {
+  let algorithm_str = case public_key.algorithm {
+    crypto_types.RSA2048 -> "RSA2048"
+    crypto_types.ECDSAP256 -> "ECDSAP256"
+  }
+
+  let body =
+    json.object([
+      #("username", json.string(username)),
+      #("public_key", json.string(public_key.key_data)),
+      #("key_algorithm", json.string(algorithm_str)),
+    ])
+    |> json.to_string
+
+  let assert Ok(req) =
+    request.to(base_url <> "/api/auth/register")
+    |> result.map(request.set_method(_, http.Post))
+    |> result.map(request.set_body(_, body))
+    |> result.map(request.prepend_header(_, "content-type", "application/json"))
+
+  case httpc.send(req) {
+    Ok(resp) if resp.status == 200 || resp.status == 201 -> {
+      // Extract user_id from response
+      case string.contains(resp.body, "user_id") {
+        True -> {
+          let parts = string.split(resp.body, "\"user_id\":\"")
+          case parts {
+            [_, rest, ..] -> {
+              let id_parts = string.split(rest, "\"")
+              case id_parts {
+                [user_id, ..] -> Ok(user_id)
+                _ -> Error("Failed to parse user_id")
+              }
+            }
+            _ -> Error("user_id not found in response")
+          }
+        }
+        False -> Error("Invalid response format")
+      }
+    }
+    Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
+    Error(_) -> Error("Connection failed")
+  }
+}
+
+// Phase 4: Get a user's public key
+pub fn get_user_public_key(
+  user_id: String,
+) -> Result(crypto_types.PublicKey, String) {
+  let assert Ok(req) =
+    request.to(base_url <> "/api/users/" <> user_id <> "/public-key")
+
+  case httpc.send(req) {
+    Ok(resp) if resp.status == 200 -> {
+      // Parse public key from response
+      case
+        string.contains(resp.body, "public_key")
+        && string.contains(resp.body, "key_algorithm")
+      {
+        True -> {
+          // Extract key_data
+          let key_parts = string.split(resp.body, "\"public_key\":\"")
+          let key_data = case key_parts {
+            [_, rest, ..] -> {
+              let data_parts = string.split(rest, "\"")
+              case data_parts {
+                [data, ..] -> data
+                _ -> ""
+              }
+            }
+            _ -> ""
+          }
+
+          // Extract algorithm
+          let alg_parts = string.split(resp.body, "\"key_algorithm\":\"")
+          let algorithm = case alg_parts {
+            [_, rest, ..] -> {
+              let alg_str_parts = string.split(rest, "\"")
+              case alg_str_parts {
+                [alg, ..] -> {
+                  case alg {
+                    "RSA2048" -> crypto_types.RSA2048
+                    "ECDSAP256" -> crypto_types.ECDSAP256
+                    _ -> crypto_types.RSA2048
+                  }
+                }
+                _ -> crypto_types.RSA2048
+              }
+            }
+            _ -> crypto_types.RSA2048
+          }
+
+          Ok(crypto_types.PublicKey(algorithm: algorithm, key_data: key_data))
+        }
+        False -> Error("Public key not found in response")
       }
     }
     Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
@@ -283,6 +420,124 @@ pub fn create_post(
     }
     Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
     Error(_) -> Error("Connection failed")
+  }
+}
+
+// Phase 4: Create a cryptographically signed post
+pub fn create_signed_post(
+  author_id: String,
+  subreddit_id: String,
+  title: String,
+  content: String,
+  private_key: crypto_types.PrivateKey,
+) -> Result(String, String) {
+  let algorithm_str = case private_key.algorithm {
+    crypto_types.RSA2048 -> "RSA2048"
+    crypto_types.ECDSAP256 -> "ECDSAP256"
+  }
+
+  let body =
+    json.object([
+      #("subreddit_id", json.string(subreddit_id)),
+      #("author_id", json.string(author_id)),
+      #("title", json.string(title)),
+      #("content", json.string(content)),
+      #("signature", json.string(private_key.key_data)),
+      #("signature_algorithm", json.string(algorithm_str)),
+    ])
+    |> json.to_string
+
+  let assert Ok(req) =
+    request.to(base_url <> "/api/posts/create")
+    |> result.map(request.set_method(_, http.Post))
+    |> result.map(request.set_body(_, body))
+    |> result.map(request.prepend_header(_, "content-type", "application/json"))
+
+  case httpc.send(req) {
+    Ok(resp) if resp.status == 200 || resp.status == 201 -> {
+      // Extract post_id
+      let parts = string.split(resp.body, "\"post_id\":\"")
+      case parts {
+        [_, rest, ..] -> {
+          let id_parts = string.split(rest, "\"")
+          case id_parts {
+            [post_id, ..] -> Ok(post_id)
+            _ -> Error("Failed to parse post_id")
+          }
+        }
+        _ -> Ok("created")
+      }
+    }
+    Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
+    Error(_) -> Error("Connection failed")
+  }
+}
+
+// Phase 4: Get a post and verify its signature
+pub fn get_post_and_verify(post_id: String) -> Result(#(Bool, String), String) {
+  let assert Ok(req) = request.to(base_url <> "/api/posts/" <> post_id)
+
+  case httpc.send(req) {
+    Ok(resp) if resp.status == 200 -> {
+      // Check if signature is present and verified
+      let has_signature = string.contains(resp.body, "\"signature\":")
+      let is_verified =
+        string.contains(resp.body, "\"signature_verified\":true")
+
+      // Extract post title for display
+      let title = case string.split(resp.body, "\"title\":\"") {
+        [_, rest, ..] -> {
+          case string.split(rest, "\"") {
+            [t, ..] -> t
+            _ -> "Unknown"
+          }
+        }
+        _ -> "Unknown"
+      }
+
+      Ok(#(has_signature && is_verified, title))
+    }
+    Ok(resp) -> Error("HTTP " <> string.inspect(resp.status))
+    Error(_) -> Error("Connection failed")
+  }
+}
+
+// Phase 4: Verify a post signature locally (client-side verification)
+pub fn verify_post_signature_locally(
+  post_id: String,
+  author_id: String,
+  title: String,
+  content: String,
+  created_at: Int,
+  signature_data: String,
+  signature_algorithm: crypto_types.KeyAlgorithm,
+) -> Result(Bool, String) {
+  // Get author's public key
+  case get_user_public_key(author_id) {
+    Error(e) -> Error("Failed to get public key: " <> e)
+    Ok(public_key) -> {
+      // Create the signature object
+      let sig =
+        crypto_types.DigitalSignature(
+          signature_data: signature_data,
+          algorithm: signature_algorithm,
+          signed_at: created_at,
+        )
+
+      // Create canonical post message
+      let post_message =
+        signature.create_post_message(
+          post_id,
+          author_id,
+          title,
+          content,
+          created_at,
+        )
+
+      // Verify the signature (returns Bool directly)
+      let valid = signature.verify_signature(post_message, sig, public_key)
+      Ok(valid)
+    }
   }
 }
 

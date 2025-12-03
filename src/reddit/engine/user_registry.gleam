@@ -5,14 +5,16 @@
 import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject, send}
 import gleam/int
+import gleam/option
 import gleam/otp/actor
 import gleam/result
 import gleam/string
+import reddit/crypto/types as crypto_types
 import reddit/protocol.{type UserRegistryMessage}
 import reddit/types.{
   type RegistrationResult, type User, type UserId, type UserResult,
-  RegistrationError, RegistrationSuccess, UserNotFound, UserSuccess,
-  User as UserType,
+  RegistrationError, RegistrationSuccess, User as UserType, UserNotFound,
+  UserSuccess, UsernameTaken,
 }
 
 pub type State {
@@ -24,8 +26,9 @@ pub type State {
 }
 
 pub fn start() -> actor.StartResult(Subject(UserRegistryMessage)) {
-  let initial_state = State(users: dict.new(), username_to_id: dict.new(), next_id: 1)
-  
+  let initial_state =
+    State(users: dict.new(), username_to_id: dict.new(), next_id: 1)
+
   let builder =
     actor.new(initial_state)
     |> actor.on_message(handle_message)
@@ -37,8 +40,8 @@ fn handle_message(
   message: UserRegistryMessage,
 ) -> actor.Next(State, UserRegistryMessage) {
   case message {
-    protocol.RegisterUser(username, reply) -> {
-      let #(result, new_state) = register_user(state, username)
+    protocol.RegisterUser(username, public_key, reply) -> {
+      let #(result, new_state) = register_user(state, username, public_key)
       send(reply, result)
       actor.continue(new_state)
     }
@@ -56,19 +59,22 @@ fn handle_message(
     }
 
     protocol.UpdateUserOnlineStatus(user_id, is_online, reply) -> {
-      let #(result, new_state) = update_user_online_status(state, user_id, is_online)
+      let #(result, new_state) =
+        update_user_online_status(state, user_id, is_online)
       send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.AddSubredditToUser(user_id, subreddit_id, reply) -> {
-      let #(result, new_state) = add_subreddit_to_user(state, user_id, subreddit_id)
+      let #(result, new_state) =
+        add_subreddit_to_user(state, user_id, subreddit_id)
       send(reply, result)
       actor.continue(new_state)
     }
 
     protocol.RemoveSubredditFromUser(user_id, subreddit_id, reply) -> {
-      let #(result, new_state) = remove_subreddit_from_user(state, user_id, subreddit_id)
+      let #(result, new_state) =
+        remove_subreddit_from_user(state, user_id, subreddit_id)
       send(reply, result)
       actor.continue(new_state)
     }
@@ -86,18 +92,29 @@ fn handle_message(
   }
 }
 
-fn register_user(state: State, username: String) -> #(RegistrationResult, State) {
+fn register_user(
+  state: State,
+  username: String,
+  public_key: option.Option(crypto_types.PublicKey),
+) -> #(RegistrationResult, State) {
   // Validate username
   case string.trim(username) {
     "" -> #(RegistrationError("Username cannot be empty"), state)
     trimmed_username -> {
       // Check if username already exists
       case dict.get(state.username_to_id, trimmed_username) {
-        Ok(_) -> #(types.UsernameTaken, state)
+        Ok(_) -> #(UsernameTaken, state)
         Error(_) -> {
           // Create new user
           let user_id = "user_" <> int.to_string(state.next_id)
           let timestamp = get_timestamp()
+
+          // Extract key_algorithm from public_key if provided
+          let key_algorithm = case public_key {
+            option.Some(pk) -> option.Some(pk.algorithm)
+            option.None -> option.None
+          }
+
           let new_user =
             UserType(
               id: user_id,
@@ -106,6 +123,8 @@ fn register_user(state: State, username: String) -> #(RegistrationResult, State)
               joined_subreddits: [],
               is_online: True,
               created_at: timestamp,
+              public_key: public_key,
+              key_algorithm: key_algorithm,
             )
 
           // Update state
@@ -245,4 +264,3 @@ fn list_filter(list: List(a), item_to_remove: a) -> List(a) {
       }
   }
 }
-

@@ -4,6 +4,9 @@
 // and their associated result types.
 
 import gleam/option.{type Option}
+import reddit/crypto/types.{
+  type DigitalSignature, type KeyAlgorithm, type PublicKey,
+}
 
 // Core ID types for type safety
 pub type UserId =
@@ -30,6 +33,9 @@ pub type User {
     joined_subreddits: List(SubredditId),
     is_online: Bool,
     created_at: Int,
+    // Bonus feature: Digital signatures
+    public_key: Option(PublicKey),
+    key_algorithm: Option(KeyAlgorithm),
   )
 }
 
@@ -59,6 +65,8 @@ pub type Post {
     created_at: Int,
     is_repost: Bool,
     original_post_id: Option(PostId),
+    // Bonus feature: Digital signature
+    signature: Option(DigitalSignature),
   )
 }
 
@@ -147,4 +155,3 @@ pub type UserResult {
   UserNotFound
   UserError(reason: String)
 }
-

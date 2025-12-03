@@ -5,8 +5,8 @@
 import gleam/erlang/process.{type Subject, send}
 import gleam/int
 import gleam/list
-import gleam/otp/actor
 import gleam/option.{type Option}
+import gleam/otp/actor
 import gleam/result
 import reddit/client/activity_coordinator.{
   type ActivityCoordinatorMessage, CastVote, CreateComment, CreatePost,
@@ -15,11 +15,10 @@ import reddit/client/activity_coordinator.{
 import reddit/client/metrics_collector.{type MetricsMessage}
 import reddit/protocol.{
   type CommentManagerMessage, type DirectMessageManagerMessage,
-  type PostManagerMessage, type SubredditManagerMessage, type UserRegistryMessage,
+  type PostManagerMessage, type SubredditManagerMessage,
+  type UserRegistryMessage,
 }
-import reddit/types.{
-  type CommentId, type PostId, type SubredditId, type UserId,
-}
+import reddit/types.{type CommentId, type PostId, type SubredditId, type UserId}
 
 pub type UserSimulatorState {
   UserSimulatorState(
@@ -73,7 +72,7 @@ pub fn start(
       activity_coordinator: activity_coordinator,
       metrics: metrics,
     )
-  
+
   let builder =
     actor.new(initial_state)
     |> actor.on_message(handle_message)
@@ -117,12 +116,15 @@ fn initialize_user(state: UserSimulatorState) -> UserSimulatorState {
     actor.call(
       state.user_registry,
       waiting: 5000,
-      sending: protocol.RegisterUser(state.username, _),
+      sending: protocol.RegisterUser(state.username, option.None, _),
     )
 
   case result {
     types.RegistrationSuccess(user) -> {
-      send(state.metrics, metrics_collector.RecordMetric(metrics_collector.UserRegistered))
+      send(
+        state.metrics,
+        metrics_collector.RecordMetric(metrics_collector.UserRegistered),
+      )
       UserSimulatorState(
         ..state,
         user_id: option.Some(user.id),
@@ -157,10 +159,7 @@ fn perform_activity(state: UserSimulatorState) -> UserSimulatorState {
   }
 }
 
-fn create_post(
-  state: UserSimulatorState,
-  user_id: UserId,
-) -> UserSimulatorState {
+fn create_post(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
   // Get a subreddit to post in
   let subreddit_id =
     actor.call(
@@ -169,19 +168,26 @@ fn create_post(
       sending: activity_coordinator.GetSubredditForActivity,
     )
 
-  let title = "Post by " <> state.username <> " at " <> int.to_string(get_timestamp())
+  let title =
+    "Post by " <> state.username <> " at " <> int.to_string(get_timestamp())
   let content = "This is a simulated post content."
 
   let result =
-    actor.call(
-      state.post_manager,
-      waiting: 5000,
-      sending: protocol.CreatePost(subreddit_id, user_id, title, content, _),
-    )
+    actor.call(state.post_manager, waiting: 5000, sending: protocol.CreatePost(
+      subreddit_id,
+      user_id,
+      title,
+      content,
+      option.None,
+      _,
+    ))
 
   case result {
     types.PostSuccess(post) -> {
-      send(state.metrics, metrics_collector.RecordMetric(metrics_collector.PostCreated))
+      send(
+        state.metrics,
+        metrics_collector.RecordMetric(metrics_collector.PostCreated),
+      )
       UserSimulatorState(..state, my_posts: [post.id, ..state.my_posts])
     }
     _ -> state
@@ -194,12 +200,8 @@ fn create_comment(
 ) -> UserSimulatorState {
   // Get all posts to potentially comment on
   let all_posts =
-    actor.call(
-      state.post_manager,
-      waiting: 5000,
-      sending: protocol.GetAllPosts,
-    )
-  
+    actor.call(state.post_manager, waiting: 5000, sending: protocol.GetAllPosts)
+
   case list.length(all_posts) {
     0 -> state
     len -> {
@@ -209,7 +211,7 @@ fn create_comment(
         Ok(post) -> {
           // 40% chance to reply to an existing comment (nested), 60% chance to comment on post
           let should_nest = erlang_uniform(10) <= 4
-          
+
           let parent_comment_id = case should_nest {
             True -> {
               // Try to get comments on this post to reply to
@@ -219,7 +221,7 @@ fn create_comment(
                   waiting: 5000,
                   sending: protocol.GetCommentsByPost(post.id, _),
                 )
-              
+
               case list.length(post_comments) {
                 0 -> option.None
                 comment_len -> {
@@ -233,23 +235,35 @@ fn create_comment(
             }
             False -> option.None
           }
-          
+
           let content = case parent_comment_id {
             option.Some(_) -> "Reply by " <> state.username
             option.None -> "Comment by " <> state.username
           }
-          
+
           let result =
             actor.call(
               state.comment_manager,
               waiting: 5000,
-              sending: protocol.CreateComment(post.id, user_id, content, parent_comment_id, _),
+              sending: protocol.CreateComment(
+                post.id,
+                user_id,
+                content,
+                parent_comment_id,
+                _,
+              ),
             )
 
           case result {
             types.CommentSuccess(comment) -> {
-              send(state.metrics, metrics_collector.RecordMetric(metrics_collector.CommentCreated))
-              UserSimulatorState(..state, my_comments: [comment.id, ..state.my_comments])
+              send(
+                state.metrics,
+                metrics_collector.RecordMetric(metrics_collector.CommentCreated),
+              )
+              UserSimulatorState(..state, my_comments: [
+                comment.id,
+                ..state.my_comments
+              ])
             }
             _ -> state
           }
@@ -266,10 +280,10 @@ fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
     n if n <= 7 -> types.Upvote
     _ -> types.Downvote
   }
-  
+
   // 50% chance to vote on a post, 50% chance to vote on a comment
   let vote_on_post = erlang_uniform(2) == 1
-  
+
   case vote_on_post {
     True -> {
       // Vote on a post
@@ -279,7 +293,7 @@ fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
           waiting: 5000,
           sending: protocol.GetAllPosts,
         )
-      
+
       case list.length(all_posts) {
         0 -> state
         len -> {
@@ -292,7 +306,10 @@ fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
                   waiting: 5000,
                   sending: protocol.VotePost(post.id, user_id, vote_type, _),
                 )
-              send(state.metrics, metrics_collector.RecordMetric(metrics_collector.VoteCast))
+              send(
+                state.metrics,
+                metrics_collector.RecordMetric(metrics_collector.VoteCast),
+              )
               state
             }
             Error(_) -> state
@@ -309,7 +326,7 @@ fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
           waiting: 5000,
           sending: protocol.GetAllPosts,
         )
-      
+
       case list.length(all_posts) {
         0 -> state
         len -> {
@@ -323,7 +340,7 @@ fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
                   waiting: 5000,
                   sending: protocol.GetCommentsByPost(post.id, _),
                 )
-              
+
               case list.length(post_comments) {
                 0 -> state
                 comment_len -> {
@@ -334,9 +351,19 @@ fn cast_vote(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
                         actor.call(
                           state.comment_manager,
                           waiting: 5000,
-                          sending: protocol.VoteComment(comment.id, user_id, vote_type, _),
+                          sending: protocol.VoteComment(
+                            comment.id,
+                            user_id,
+                            vote_type,
+                            _,
+                          ),
                         )
-                      send(state.metrics, metrics_collector.RecordMetric(metrics_collector.VoteCast))
+                      send(
+                        state.metrics,
+                        metrics_collector.RecordMetric(
+                          metrics_collector.VoteCast,
+                        ),
+                      )
                       state
                     }
                     Error(_) -> state
@@ -358,11 +385,7 @@ fn create_repost(
 ) -> UserSimulatorState {
   // Get all posts to choose from
   let all_posts =
-    actor.call(
-      state.post_manager,
-      waiting: 5000,
-      sending: protocol.GetAllPosts,
-    )
+    actor.call(state.post_manager, waiting: 5000, sending: protocol.GetAllPosts)
 
   // Pick first post that's not ours
   case list.first(all_posts) {
@@ -379,12 +402,20 @@ fn create_repost(
         actor.call(
           state.post_manager,
           waiting: 5000,
-          sending: protocol.CreateRepost(original_post.id, user_id, subreddit_id, _),
+          sending: protocol.CreateRepost(
+            original_post.id,
+            user_id,
+            subreddit_id,
+            _,
+          ),
         )
 
       case result {
         types.PostSuccess(repost) -> {
-          send(state.metrics, metrics_collector.RecordMetric(metrics_collector.RepostCreated))
+          send(
+            state.metrics,
+            metrics_collector.RecordMetric(metrics_collector.RepostCreated),
+          )
           UserSimulatorState(..state, my_posts: [repost.id, ..state.my_posts])
         }
         _ -> state
@@ -399,23 +430,32 @@ fn send_dm(state: UserSimulatorState, user_id: UserId) -> UserSimulatorState {
   // In a real implementation, we'd query for actual user IDs
   // For simulation, we'll create a message to a simulated recipient
   let recipient_id = "user_" <> int.to_string(get_random_user_id())
-  
+
   // Don't send to ourselves
   case recipient_id == user_id {
     True -> state
     False -> {
       let content = "Direct message from " <> state.username
-      
+
       let result =
         actor.call(
           state.dm_manager,
           waiting: 5000,
-          sending: protocol.SendDirectMessage(user_id, recipient_id, content, option.None, _),
+          sending: protocol.SendDirectMessage(
+            user_id,
+            recipient_id,
+            content,
+            option.None,
+            _,
+          ),
         )
-      
+
       case result {
         types.DirectMessageSuccess(_dm) -> {
-          send(state.metrics, metrics_collector.RecordMetric(metrics_collector.DirectMessageSent))
+          send(
+            state.metrics,
+            metrics_collector.RecordMetric(metrics_collector.DirectMessageSent),
+          )
           state
         }
         _ -> state
@@ -460,12 +500,15 @@ fn join_subreddit(
           waiting: 5000,
           sending: protocol.AddSubredditToUser(user_id, subreddit_id, _),
         )
-      
-      send(state.metrics, metrics_collector.RecordMetric(metrics_collector.SubredditJoined))
-      UserSimulatorState(
-        ..state,
-        joined_subreddits: [subreddit_id, ..state.joined_subreddits],
+
+      send(
+        state.metrics,
+        metrics_collector.RecordMetric(metrics_collector.SubredditJoined),
       )
+      UserSimulatorState(..state, joined_subreddits: [
+        subreddit_id,
+        ..state.joined_subreddits
+      ])
     }
   }
 }
@@ -508,4 +551,3 @@ fn get_timestamp() -> Int {
   |> int.divide(1_000_000)
   |> result.unwrap(0)
 }
-
