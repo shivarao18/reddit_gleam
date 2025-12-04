@@ -154,6 +154,7 @@ src/
 ├── reddit_simulator.gleam          # Main entry point & simulator
 ├── reddit_client.gleam             # CLI client with crypto support
 ├── reddit_multi_client.gleam       # Multi-client demo with crypto
+├── reddit_key_generator.gleam      # Crypto key generator (RSA/ECDSA)
 ├── reddit_server.gleam             # REST API server
 └── reddit/
     ├── types.gleam                 # Core data types (with crypto fields)
@@ -358,6 +359,20 @@ curl http://localhost:3000/api/posts/post_1
 ```
 
 ## Automated Clients
+
+### Key Generator (For Manual Testing)
+
+```bash
+gleam run -m reddit_key_generator
+```
+
+Generates valid cryptographic keys for manual API testing:
+- **RSA-2048** keypair (public + private keys)
+- **ECDSA P-256** keypair (public + private keys)
+- Ready-to-use `curl` commands for user registration
+- Solves PowerShell quote escaping issues
+
+**Use Case**: Run this before manually registering users with crypto keys via `curl` commands.
 
 ### Single Client Demo
 

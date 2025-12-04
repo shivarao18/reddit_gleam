@@ -3,7 +3,9 @@
 **Course**: COP5615 - Distributed Operating System Principles  
 **Project**: Project 4 - Part II (REST API + Bonus: Digital Signatures)  
 **Team Members**: Ruchita Potamsetti, Shiva Kumar Thummanapalli  
-**Date**: December 3, 2025
+
+**Demo Video**: [https://youtu.be/EkNpSx4Ifms]  
+**Bonus Demo Video**: [https://youtu.be/fD37ka2TXDI]
 
 ---
 
@@ -1884,6 +1886,7 @@ reddit_gleam/
 │   ├── reddit_server.gleam           # REST API server (main)
 │   ├── reddit_client.gleam           # CLI client with crypto
 │   ├── reddit_multi_client.gleam     # Multi-client demo
+│   ├── reddit_key_generator.gleam    # Crypto key generator helper
 │   ├── reddit_simulator.gleam        # Part I simulator (legacy)
 │   └── reddit/
 │       ├── types.gleam               # Core data types
@@ -1915,11 +1918,12 @@ reddit_gleam/
 │           └── ...
 ├── test/
 │   └── reddit_test.gleam             # 26 automated tests
+├── Reddit_demo.mp4                   # Part II main demo video
+├── Reddit_bonus_demo.mp4             # Cryptographic signatures demo video
 ├── README.md                         # Quick start and API documentation
 ├── report.md                         # Part I final report
-├── PART2_REPORT.md                   # Part II final report (this document)
-├── DEMO_SCRIPT.md                    # Manual demo script (local reference)
-└── CRYPTO_DEMO_SCRIPT.md             # Crypto demo script (local reference)
+└── PART2_REPORT.md                   # Part II final report (this document)
+
 ```
 
 **Documentation Files** (7 total):
